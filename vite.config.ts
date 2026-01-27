@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  base: '/bonglook/',
   server: {
     open: false,
-    port: 35173, // Unique UI Port
-    host: true,  // Important for Docker
+    port: 35173,
+    host: true,
   },
   root: '.',
   build: {
