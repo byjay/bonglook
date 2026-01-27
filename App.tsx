@@ -14,12 +14,12 @@ const App: React.FC = () => {
   const [apiStatus, setApiStatus] = useState({ glm: 'testing' });
 
   const [config, setConfig] = useState<Config>({
-    apiKey: '384fffa4d8a44ce58ee573be0d49d995.kqLAZNeRmjnUNPJh',
+    apiKey: import.meta.env.VITE_API_KEY || '',
     agentId: '',
-    mailUser: 'designsir@seastargo.com',
-    mailPass: ['pE5cptK>P{N7=dYv', '$', 'R,?'].join(''),
-    pop3Server: 'pop3.mailplug.co.kr',
-    pop3Port: 995
+    mailUser: import.meta.env.VITE_MAIL_USER || '',
+    mailPass: import.meta.env.VITE_MAIL_PASS || '',
+    pop3Server: import.meta.env.VITE_POP3_SERVER || 'pop3.mailplug.co.kr',
+    pop3Port: parseInt(import.meta.env.VITE_POP3_PORT || '995')
   });
 
   const [isLoading, setIsLoading] = useState(false);
