@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.env*
+*.bat
+README.md
+Dockerfile
+docker-compose.yml
+walkthrough.md
+task.md
+implementation_plan.md

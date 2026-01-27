@@ -1,0 +1,7 @@
+{
+  "name": "BongLook AI Outlook",
+  "description": "A high-performance mail analysis application with an Outlook-inspired interface, featuring 5-agent parallel processing using advanced AI for summaries, action items, deadlines, and multi-modal attachment analysis.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

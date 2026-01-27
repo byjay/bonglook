@@ -1,0 +1,26 @@
+services:
+  bonglook-ui:
+    build: .
+    container_name: bonglook-ui
+    ports:
+      - "35173:35173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    command: npm run dev
+    restart: always
+
+  bonglook-api:
+    build: .
+    container_name: bonglook-api
+    ports:
+      - "33001:33001"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    env_file:
+      - .env
+    command: npm run start:backend
+    restart: always
