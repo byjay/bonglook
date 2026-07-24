@@ -36,19 +36,22 @@ window.addEventListener('DOMContentLoaded', async () => {
   applyConfigToUI();
   updateKeyStatus();
 
-  // ----- 아이콘 레일 네비게이션 -----
-  $$('.rail-btn').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
-
-  // ----- 폴더 트리 -----
+  // ----- 폴더 트리 (뷰 전환 + 폴더 필터 모두 여기서) -----
   $$('.fld-item').forEach(btn => btn.addEventListener('click', () => {
     if (btn.dataset.nav) { switchView(btn.dataset.nav); return; }
     // 폴더 필터
-    $$('.fld-item[data-folder]').forEach(x => x.classList.remove('active'));
+    $$('.fld-item').forEach(x => x.classList.remove('active'));
     btn.classList.add('active');
     currentFolder = btn.dataset.folder;
     $('#mlp-title').textContent = btn.textContent.replace(/\d+$/, '').trim();
     switchView('mail');
     loadMails($('#global-search').value);
+  }));
+
+  // ----- 메뉴 탭 (홈/파일 등 시각적 활성화만) -----
+  $$('.menu-tab').forEach(tab => tab.addEventListener('click', () => {
+    $$('.menu-tab').forEach(x => x.classList.remove('active'));
+    tab.classList.add('active');
   }));
 
   // ----- 리본 버튼 -----
@@ -110,6 +113,19 @@ window.addEventListener('DOMContentLoaded', async () => {
   $('#btn-contact-search').addEventListener('click', () => loadContacts($('#contact-search').value));
   $('#contact-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadContacts($('#contact-search').value); });
 
+  // ----- 관리자 진단 -----
+  $('#btn-admin-refresh').addEventListener('click', refreshAdminInfo);
+  $('#btn-admin-testconn').addEventListener('click', refreshConnectionStatus);
+  $('#btn-admin-openattach').addEventListener('click', async () => {
+    const s = await window.api.dbStatus();
+    if (s && s.path) {
+      // DB와 같은 userData 하위의 attachments 폴더 열기
+      const attachDir = s.path.replace(/[\\/][^\\/]+$/, '') + '/attachments';
+      const r = await window.api.openPath(attachDir);
+      if (r && !r.ok) alert('첨부 폴더를 열 수 없습니다: ' + (r.error || '경로 없음'));
+    } else alert('DB 경로를 확인할 수 없습니다.');
+  });
+
   // ----- 이벤트 수신 -----
   window.api.onUpdateStatus(handleUpdateStatus);
   window.api.onNewMails(handleNewMails);
@@ -118,9 +134,37 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   refreshConnectionStatus();
   refreshDbStatus();
+  refreshAdminInfo();
   loadStats();
   loadMails('');   // 시작 시 메일 뷰 자동 로드
 });
+
+// ============================================================
+//  관리자 진단 정보 채우기
+// ============================================================
+async function refreshAdminInfo() {
+  try { $('#admin-version').textContent = 'v' + (await window.api.getVersion()); } catch {}
+  try {
+    const s = await window.api.dbStatus();
+    const dbEl = $('#admin-db'), ftsEl = $('#admin-fts'), pathEl = $('#admin-db-path');
+    if (s.ready) {
+      dbEl.textContent = '정상'; dbEl.className = 'admin-v ok';
+      ftsEl.textContent = s.fts ? '사용' : '미사용(LIKE 검색)'; ftsEl.className = 'admin-v' + (s.fts ? ' ok' : '');
+    } else {
+      dbEl.textContent = '초기화 실패'; dbEl.className = 'admin-v bad';
+      ftsEl.textContent = '-';
+    }
+    pathEl.textContent = s.path || '-';
+    pathEl.title = s.path || '';
+  } catch {}
+  try {
+    const r = await window.api.dbStats();
+    if (r.ok) {
+      $('#admin-mailcount').textContent = (r.stats.total || 0).toLocaleString() + '건';
+      $('#admin-lastsync').textContent = r.lastSyncAt ? new Date(r.lastSyncAt).toLocaleString('ko-KR') : '없음';
+    }
+  } catch {}
+}
 
 // ============================================================
 //  소스(Outlook/PST) 전환 - 리본에서 즉시
@@ -152,7 +196,7 @@ function syncSourceUI() {
   $('#rb-src-pst').classList.toggle('active', src === 'pst');
   const pn = $('#rb-pst-name');
   if (src === 'pst' && config.pstPath) {
-    pn.textContent = '📄 ' + config.pstPath.split(/[\\/]/).pop();
+    pn.textContent = '' + config.pstPath.split(/[\\/]/).pop();
     pn.classList.remove('hidden');
   } else {
     pn.classList.add('hidden');
@@ -172,7 +216,7 @@ async function refreshDbStatus() {
     const s = await window.api.dbStatus();
     if (!s.ready) {
       const el = $('#sync-info');
-      el.textContent = '⚠️ DB 초기화 실패 (재빌드 필요)';
+      el.textContent = 'DB 초기화 실패 (재빌드 필요)';
       el.title = s.error || '';
     }
   } catch (_) {}
@@ -220,18 +264,18 @@ async function loadStats() {
 async function runSync() {
   const btn = $('#rb-sync');
   btn.disabled = true;
-  showLoading('🔄 메일 동기화 시작...');
+  showLoading('메일 동기화 시작...');
   try {
     const res = await window.api.syncRun();
     hideLoading();
     if (res.ok) {
-      $('#sync-info').textContent = `✅ ${res.fetched}건 동기화 (첨부 ${res.attachSaved || 0}개 저장)`;
+      $('#sync-info').textContent = `${res.fetched}건 동기화 완료 (첨부 ${res.attachSaved || 0}개 저장)`;
       loadStats();
       loadMails($('#global-search').value);
       alert(`동기화 완료!\n\n• 메일 ${res.fetched}건 저장/색인\n• 첨부 ${res.attachSaved || 0}개 로컬 저장${res.attachFail ? ' ('+res.attachFail+'개 실패)' : ''}`);
     } else {
       alert('동기화 실패: ' + res.error);
-      $('#sync-info').textContent = '⚠️ 동기화 실패';
+      $('#sync-info').textContent = '동기화 실패';
     }
   } catch (err) {
     hideLoading();
@@ -259,14 +303,14 @@ async function generateBriefing() {
     const res = await window.api.aiBriefing(briefMode);
     hideLoading();
     if (res.ok) {
-      box.innerHTML = `<div class="briefing-meta">📅 ${res.period} · 분석 메일 ${res.count}건 · 키#${res.usedKeyIndex}</div>` +
+      box.innerHTML = `<div class="briefing-meta">${res.period} · 분석 메일 ${res.count}건 · 키#${res.usedKeyIndex}</div>` +
         `<div class="briefing-body">${formatAnswer(res.content)}</div>`;
     } else {
-      box.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+      box.innerHTML = `<div class="empty">${escapeHtml(res.error)}</div>`;
     }
   } catch (err) {
     hideLoading();
-    box.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`;
+    box.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
   }
 }
 
@@ -274,7 +318,7 @@ async function generateBriefing() {
 //  주소록
 // ============================================================
 async function importContacts() {
-  showLoading('📥 Outlook 주소록 가져오는 중...');
+  showLoading('Outlook 주소록 가져오는 중...');
   try {
     const res = await window.api.contactsImport();
     hideLoading();
@@ -288,7 +332,7 @@ async function loadContacts(query) {
   list.innerHTML = '<div class="empty">불러오는 중...</div>';
   try {
     const res = await window.api.contactsList(query || '', 500);
-    if (!res.ok) { list.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`; return; }
+    if (!res.ok) { list.innerHTML = `<div class="empty">${escapeHtml(res.error)}</div>`; return; }
     const contacts = res.contacts || [];
     if (!contacts.length) { list.innerHTML = '<div class="empty">👥 주소록이 비어 있습니다.</div>'; return; }
     list.innerHTML = '';
@@ -309,7 +353,7 @@ async function loadContacts(query) {
       });
       list.appendChild(item);
     });
-  } catch (err) { list.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`; }
+  } catch (err) { list.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`; }
 }
 
 // ============================================================
@@ -317,8 +361,9 @@ async function loadContacts(query) {
 // ============================================================
 let contactsLoadedOnce = false;
 function switchView(view) {
-  // 레일 활성화
-  $$('.rail-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  // 폴더 트리의 nav 항목 활성화 (메일 뷰는 폴더 항목이 담당)
+  $$('.fld-item[data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === view));
+  if (view !== 'mail') $$('.fld-item[data-folder]').forEach(b => b.classList.remove('active'));
   $$('.view').forEach(v => v.classList.remove('active'));
   const el = $('#view-' + view);
   if (el) el.classList.add('active');
@@ -356,7 +401,7 @@ async function saveSettings() {
   $$('.api-key').forEach(inp => { apiKeys[parseInt(inp.dataset.idx, 10)] = inp.value.trim(); });
   const source = document.querySelector('input[name="source"]:checked').value;
   const dateMode = document.querySelector('input[name="dateMode"]:checked').value;
-  if (source === 'pst' && !$('#pst-path').value.trim()) { alert('PST 파일 경로를 선택해주세요. (📁 찾기 버튼)'); return; }
+  if (source === 'pst' && !$('#pst-path').value.trim()) { alert('PST 파일 경로를 선택해주세요. (찾기 버튼)'); return; }
 
   const newConfig = {
     apiKeys, model: $('#model-select').value,
@@ -382,31 +427,31 @@ function updateRealtimeDot() {
 async function refreshConnectionStatus() {
   const pill = $('#conn-pill');
   const el = $('#conn-status');
-  pill.textContent = '● 확인 중'; pill.className = 'conn-pill';
+  pill.innerHTML = '<span class="cp-dot"></span> 확인 중'; pill.className = 'conn-pill';
   if (el) { el.textContent = '연결 확인 중...'; el.className = 'conn-status'; }
   try {
     const r = await window.api.checkConnection();
     if (r.ok) {
       if (r.mode === 'pst') {
-        pill.textContent = '● PST 연결됨'; pill.className = 'conn-pill ok';
-        if (el) { el.textContent = `✅ PST 파일 연결됨: ${r.pstPath}`; el.className = 'conn-status ok'; }
+        pill.innerHTML = '<span class="cp-dot"></span> PST 연결됨'; pill.className = 'conn-pill ok';
+        if (el) { el.textContent = `PST 파일 연결됨: ${r.pstPath}`; el.className = 'conn-status ok'; }
       } else {
         const stores = (r.stores || []).map(s => s.name).join(', ');
-        pill.textContent = '● Outlook 연결됨'; pill.className = 'conn-pill ok';
-        if (el) { el.textContent = `✅ Outlook 연결됨 (계정/데이터: ${stores || '기본'})`; el.className = 'conn-status ok'; }
+        pill.innerHTML = '<span class="cp-dot"></span> Outlook 연결됨'; pill.className = 'conn-pill ok';
+        if (el) { el.textContent = `Outlook 연결됨 (계정/데이터: ${stores || '기본'})`; el.className = 'conn-status ok'; }
       }
     } else {
-      pill.textContent = '● 연결 안 됨'; pill.className = 'conn-pill bad';
-      if (el) { el.textContent = `⚠️ ${r.error || '연결되지 않음'}`; el.className = 'conn-status bad'; }
+      pill.innerHTML = '<span class="cp-dot"></span> 연결 안 됨'; pill.className = 'conn-pill bad';
+      if (el) { el.textContent = `${r.error || '연결되지 않음'}`; el.className = 'conn-status bad'; }
     }
   } catch (err) {
-    pill.textContent = '● 오류'; pill.className = 'conn-pill bad';
-    if (el) { el.textContent = `⚠️ ${String(err)}`; el.className = 'conn-status bad'; }
+    pill.innerHTML = '<span class="cp-dot"></span> 오류'; pill.className = 'conn-pill bad';
+    if (el) { el.textContent = `${String(err)}`; el.className = 'conn-status bad'; }
   }
 }
 
 async function checkNewMails() {
-  showLoading('📨 새 메일 확인 중...');
+  showLoading('새 메일 확인 중...');
   try {
     const res = await window.api.checkNew();
     hideLoading();
@@ -428,12 +473,12 @@ function handleNewMails(mails) {
 function updateKeyStatus() {
   const count = (config.apiKeys || []).filter(k => k && k.trim()).length;
   const el = $('#key-status');
-  if (count > 0) { el.textContent = `API 키: ${count}개 활성 ✓`; el.className = 'key-status ok'; }
+  if (count > 0) { el.textContent = `API 키: ${count}개 활성`; el.className = 'key-status ok'; }
   else { el.textContent = 'API 키 없음 - 설정 필요'; el.className = 'key-status bad'; }
 }
 function needKey() {
   if ((config.apiKeys || []).filter(k => k && k.trim()).length === 0) {
-    alert('API 키가 필요합니다. ⚙️ 설정에서 입력하세요.');
+    alert('API 키가 필요합니다. 설정에서 입력하세요.');
     switchView('settings');
     return true;
   }
@@ -455,7 +500,7 @@ function renderPendingFiles() {
     const name = f.split(/[\\/]/).pop();
     const chip = document.createElement('div');
     chip.className = 'file-chip';
-    chip.innerHTML = `📄 ${escapeHtml(name)} <span class="remove" data-i="${i}">✕</span>`;
+    chip.innerHTML = `${escapeHtml(name)} <span class="remove" data-i="${i}">×</span>`;
     chip.querySelector('.remove').addEventListener('click', () => { pendingFiles.splice(i, 1); renderPendingFiles(); });
     box.appendChild(chip);
   });
@@ -470,7 +515,7 @@ async function sendChat() {
   if (!text && pendingFiles.length === 0) return;
   if (needKey()) return;
 
-  const userDisplay = text + (pendingFiles.length ? `\n📎 첨부 ${pendingFiles.length}개` : '');
+  const userDisplay = text + (pendingFiles.length ? `\n첨부 ${pendingFiles.length}개` : '');
   addMessage('user', escapeHtml(userDisplay));
   input.value = ''; autoGrow();
   const typingEl = addTyping();
@@ -478,7 +523,7 @@ async function sendChat() {
   try {
     let contextParts = [];
     if (pendingFiles.length > 0) {
-      setTyping(typingEl, '📎 첨부파일 분석 중...');
+      setTyping(typingEl, '첨부파일 분석 중...');
       const results = await window.api.analyzeAttachments(pendingFiles);
       for (const r of results) {
         if (r.ok) contextParts.push(`[첨부파일: ${r.file} (${r.type}, ${r.sizeKB}KB)]\n${r.text}`);
@@ -499,7 +544,7 @@ async function sendChat() {
         chatHistory.push({ role: 'user', content: text || '첨부 분석' });
         chatHistory.push({ role: 'assistant', content: res.content });
         addMessage('assistant', formatAnswer(res.content), { keyIndex: res.usedKeyIndex });
-      } else addMessage('assistant', `❌ 오류: ${escapeHtml(res.error)}`);
+      } else addMessage('assistant', `오류: ${escapeHtml(res.error)}`);
       return;
     }
 
@@ -511,10 +556,10 @@ async function sendChat() {
       chatHistory.push({ role: 'assistant', content: res.content });
       const info = res.contextCount ? { keyIndex: res.usedKeyIndex, ctx: res.contextCount } : { keyIndex: res.usedKeyIndex };
       addMessage('assistant', formatAnswer(res.content), info);
-    } else addMessage('assistant', `❌ 오류가 발생했습니다:\n${escapeHtml(res.error)}`);
+    } else addMessage('assistant', `오류가 발생했습니다:\n${escapeHtml(res.error)}`);
   } catch (err) {
     removeTyping(typingEl);
-    addMessage('assistant', `❌ 처리 중 오류: ${escapeHtml(String(err))}`);
+    addMessage('assistant', `처리 중 오류: ${escapeHtml(String(err))}`);
   }
 }
 
@@ -523,7 +568,7 @@ async function sendChat() {
 // ============================================================
 async function loadMails(query) {
   const list = $('#mail-list');
-  list.innerHTML = '<div class="empty">🔄 불러오는 중...</div>';
+  list.innerHTML = '<div class="empty">불러오는 중...</div>';
   try {
     let hasAttach = ($('#filter-attach') && $('#filter-attach').checked) ? true : null;
     let folder = null;
@@ -531,21 +576,22 @@ async function loadMails(query) {
     else if (currentFolder === 'Inbox' || currentFolder === 'Sent') folder = currentFolder;
 
     const res = await window.api.dbSearchMails({ query: (query || '').trim(), limit: 300, hasAttach, folder });
-    if (!res.ok) { list.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`; return; }
+    if (!res.ok) { list.innerHTML = `<div class="empty">${escapeHtml(res.error)}</div>`; return; }
     mailCache = res.mails;
     renderMailList(mailCache);
   } catch (err) {
-    list.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`;
+    list.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
   }
 }
 
 function renderMailList(mails) {
   const list = $('#mail-list');
   if (!mails || mails.length === 0) {
-    list.innerHTML = '<div class="empty">📭 저장된 메일이 없습니다.<br>상단 <b>🔄 동기화</b>를 먼저 실행하세요.</div>';
+    list.innerHTML = '<div class="empty">저장된 메일이 없습니다.<br>상단 <b>동기화</b>를 먼저 실행하세요.</div>';
     return;
   }
   list.innerHTML = '';
+  let lastGroup = null;
   mails.forEach(m => {
     const subject = m.subject || '(제목 없음)';
     const sender = (m.sender_name !== undefined ? m.sender_name : m.sender) || '(발신자)';
@@ -557,23 +603,26 @@ function renderMailList(mails) {
     const lang = m.lang || '';
     const langTag = lang === 'en' ? 'EN' : (lang === 'zh' ? 'ZH' : (lang === 'ja' ? 'JA' : ''));
 
+    // 날짜 그룹 헤더 (오늘/어제/이번 주/지난 주/이전)
+    const group = dateGroup(received);
+    if (group !== lastGroup) {
+      lastGroup = group;
+      const gh = document.createElement('div');
+      gh.className = 'date-group';
+      gh.textContent = group;
+      list.appendChild(gh);
+    }
+
     const item = document.createElement('div');
     item.className = 'mail-item';
     item.innerHTML = `
       ${unread ? '<span class="mi-unread-bar"></span>' : ''}
-      <div class="mi-avatar" style="background:${avatarColor(sender)}">${escapeHtml(initials(sender))}</div>
-      <div class="mi-main">
-        <div class="mi-row1">
-          <span class="mi-sender">${escapeHtml(sender)}</span>
-          <span class="mi-date">${escapeHtml(shortDate(received))}</span>
-        </div>
-        <div class="mi-subject ${unread ? 'unread' : ''}">${escapeHtml(subject)}</div>
-        <div class="mi-preview">${escapeHtml(preview)}</div>
-        <div class="mi-tags">
-          ${langTag ? `<span class="lang-tag">${langTag}</span>` : ''}
-          ${hasAttach ? `<span class="attach-tag">📎 ${attachCount || ''}</span>` : ''}
-        </div>
-      </div>`;
+      <div class="mi-row1">
+        <span class="mi-sender">${escapeHtml(sender)}</span>
+        <span class="mi-date">${escapeHtml(shortDate(received))}</span>
+      </div>
+      <div class="mi-subject ${unread ? 'unread' : ''}">${escapeHtml(subject)}</div>
+      <div class="mi-preview">${escapeHtml(preview)}${(langTag || hasAttach) ? `<span class="mi-tags">${langTag ? `<span class="lang-tag">${langTag}</span>` : ''}${hasAttach ? `<span class="attach-tag">첨부${attachCount ? ' ' + attachCount : ''}</span>` : ''}</span>` : ''}</div>`;
     item.addEventListener('click', () => {
       $$('.mail-item').forEach(x => x.classList.remove('selected'));
       item.classList.add('selected');
@@ -581,6 +630,22 @@ function renderMailList(mails) {
     });
     list.appendChild(item);
   });
+}
+
+// 날짜를 오늘/어제/이번 주/지난 주/이전 그룹으로 분류
+function dateGroup(s) {
+  if (!s) return '이전';
+  const m = String(s).match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+  if (!m) return '이전';
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffDays = Math.floor((today - d) / 86400000);
+  if (diffDays <= 0) return '오늘';
+  if (diffDays === 1) return '어제';
+  if (diffDays < 7) return '이번 주';
+  if (diffDays < 14) return '지난 주';
+  return '이전';
 }
 
 function shortDate(s) {
@@ -601,8 +666,8 @@ function shortDate(s) {
 // ============================================================
 async function openMailDetail(m) {
   let id = m.id;
-  if (!id) { alert('이 메일은 아직 DB에 색인되지 않았습니다. 🔄 동기화 후 확인하세요.'); return; }
-  showLoading('📧 메일 불러오는 중...');
+  if (!id) { alert('이 메일은 아직 DB에 색인되지 않았습니다. 동기화 후 확인하세요.'); return; }
+  showLoading('메일 불러오는 중...');
   try {
     const res = await window.api.dbGetMail(id);
     hideLoading();
@@ -629,20 +694,20 @@ function renderReadingPane(mail, atts, analyses) {
         <div class="rp-from-mail">${escapeHtml(mail.sender_email || '')}</div>
       </div>
     </div>
-    <div class="rp-meta">📥 받는사람: ${escapeHtml(mail.recipients || '')}</div>
-    ${mail.cc ? `<div class="rp-meta">📋 참조: ${escapeHtml(mail.cc)}</div>` : ''}
-    <div class="rp-meta">🕐 ${escapeHtml(mail.received_at || '')} · 🌐 ${langNames[mail.lang] || mail.lang} · 📁 ${escapeHtml(mail.folder || '')}</div>`;
+    <div class="rp-meta">받는사람: ${escapeHtml(mail.recipients || '')}</div>
+    ${mail.cc ? `<div class="rp-meta">참조: ${escapeHtml(mail.cc)}</div>` : ''}
+    <div class="rp-meta">${escapeHtml(mail.received_at || '')} · ${langNames[mail.lang] || mail.lang} · ${escapeHtml(mail.folder || '')}</div>`;
 
   if (atts && atts.length) {
-    html += `<div class="rp-atts"><b>📎 첨부파일 (${atts.length})</b><ul>` +
-      atts.map(a => `<li>📄 ${escapeHtml(a.file_name)} <span style="color:var(--muted)">(${a.size_kb}KB)</span> ${a.saved_path ? `<button class="link-btn" data-open="${escapeHtml(a.saved_path)}">열기</button> <button class="link-btn" data-folder="${escapeHtml(a.saved_path)}">폴더</button>` : ''}</li>`).join('') +
+    html += `<div class="rp-atts"><b>첨부파일 (${atts.length})</b><ul>` +
+      atts.map(a => `<li>${escapeHtml(a.file_name)} <span style="color:var(--muted)">(${a.size_kb}KB)</span> ${a.saved_path ? `<button class="link-btn" data-open="${escapeHtml(a.saved_path)}">열기</button> <button class="link-btn" data-folder="${escapeHtml(a.saved_path)}">폴더</button>` : ''}</li>`).join('') +
       `</ul></div>`;
   }
 
   html += `<div class="rp-actions">
-    <button class="btn-primary" id="rp-translate-btn">🌐 번역/분석</button>
-    <button class="btn-primary" id="rp-reply-btn">✍️ 답장 초안</button>
-    <button id="rp-ask-btn">💬 이 메일로 질문</button>
+    <button class="btn-primary" id="rp-translate-btn">번역/분석</button>
+    <button class="btn-primary" id="rp-reply-btn">답장 초안</button>
+    <button id="rp-ask-btn">이 메일로 질문</button>
   </div>`;
 
   html += `<div class="rp-body">${escapeHtml((mail.body || '').slice(0, 12000))}</div>`;
@@ -658,13 +723,13 @@ function renderReadingPane(mail, atts, analyses) {
   $('#rp-ask-btn').addEventListener('click', () => {
     switchView('chat');
     chatHistory.push({ role: 'user', content: `[참고 메일]\n제목:${mail.subject}\n발신:${mail.sender_name}\n본문:${(mail.body||'').slice(0,4000)}` });
-    addMessage('assistant', `📧 "<b>${escapeHtml(mail.subject)}</b>" 메일을 맥락에 추가했습니다. 질문해보세요.`);
+    addMessage('assistant', `"<b>${escapeHtml(mail.subject)}</b>" 메일을 맥락에 추가했습니다. 질문해보세요.`);
   });
 
   if (analyses && analyses.length) {
     const box = $('#rp-ai-result');
-    const kindName = { translate: '🌐 번역/분석', reply: '✍️ 답장초안', summary: '요약' };
-    box.innerHTML = `<div class="prev-analyses"><b>📚 이전 분석 기록</b>` +
+    const kindName = { translate: '번역/분석', reply: '답장초안', summary: '요약' };
+    box.innerHTML = `<div class="prev-analyses"><b>이전 분석 기록</b>` +
       analyses.slice(0, 3).map(a => `<details><summary>${kindName[a.kind] || a.kind} (${a.created_at})</summary><div class="briefing-body">${formatAnswer(a.content)}</div></details>`).join('') +
       `</div>`;
   }
@@ -673,21 +738,21 @@ function renderReadingPane(mail, atts, analyses) {
 async function rpTranslate() {
   if (!selectedMail || needKey()) return;
   const box = $('#rp-ai-result');
-  box.innerHTML = '<div class="empty">🌐 번역/분석 중...</div>';
+  box.innerHTML = '<div class="empty">번역/분석 중...</div>';
   const res = await window.api.aiTranslate(selectedMail.id);
-  box.innerHTML = res.ok ? `<div class="briefing-body">${formatAnswer(res.content)}</div>` : `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+  box.innerHTML = res.ok ? `<div class="briefing-body">${formatAnswer(res.content)}</div>` : `<div class="empty">${escapeHtml(res.error)}</div>`;
 }
 
 async function rpDraftReply() {
   if (!selectedMail || needKey()) return;
-  const instruction = prompt('답장에 반영할 지시사항이 있으면 입력하세요 (없으면 비워두기):', '') || '';
+  const instruction = (window.prompt ? (prompt('답장에 반영할 지시사항이 있으면 입력하세요 (없으면 비워두기):', '') || '') : '');
   const box = $('#rp-ai-result');
-  box.innerHTML = '<div class="empty">✍️ 답장 초안 작성 중...</div>';
+  box.innerHTML = '<div class="empty">답장 초안 작성 중...</div>';
   const res = await window.api.aiDraftReply(selectedMail.id, instruction, 'formal', 'auto');
   if (res.ok) {
-    box.innerHTML = `<div class="reply-draft"><div class="reply-head">✍️ 답장 초안 <button class="link-btn" id="copy-reply">📋 복사</button></div><pre>${escapeHtml(res.content)}</pre></div>`;
-    $('#copy-reply').addEventListener('click', () => { navigator.clipboard.writeText(res.content); $('#copy-reply').textContent = '✅ 복사됨'; });
-  } else box.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+    box.innerHTML = `<div class="reply-draft"><div class="reply-head">답장 초안 <button class="link-btn" id="copy-reply">복사</button></div><pre>${escapeHtml(res.content)}</pre></div>`;
+    $('#copy-reply').addEventListener('click', () => { navigator.clipboard.writeText(res.content); $('#copy-reply').textContent = '복사됨'; });
+  } else box.innerHTML = `<div class="empty">${escapeHtml(res.error)}</div>`;
 }
 
 // ============================================================
@@ -707,11 +772,11 @@ function addTyping() {
   const log = $('#chat-log');
   const div = document.createElement('div');
   div.className = 'msg assistant typing';
-  div.innerHTML = `<div class="bubble">⏳ 처리 중...</div>`;
+  div.innerHTML = `<div class="bubble">처리 중...</div>`;
   log.appendChild(div); log.scrollTop = log.scrollHeight;
   return div;
 }
-function setTyping(el, text) { if (el) el.querySelector('.bubble').textContent = '⏳ ' + text; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; }
+function setTyping(el, text) { if (el) el.querySelector('.bubble').textContent = text; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; }
 function removeTyping(el) { if (el && el.parentNode) el.parentNode.removeChild(el); }
 
 function formatAnswer(text) {
@@ -739,12 +804,12 @@ async function checkUpdate() {
 function handleUpdateStatus({ status, info }) {
   const badge = $('#update-badge');
   const map = {
-    checking: ['info', '🔍 업데이트 확인 중...'],
-    available: ['info', '⬇️ 새 버전 다운로드 중...'],
-    downloading: ['info', `⬇️ 다운로드 ${info && info.percent ? Math.round(info.percent) + '%' : '...'}`],
-    downloaded: ['ready', '✅ 업데이트 준비 완료 (재시작 시 적용)'],
+    checking: ['info', '업데이트 확인 중...'],
+    available: ['info', '새 버전 다운로드 중...'],
+    downloading: ['info', `다운로드 ${info && info.percent ? Math.round(info.percent) + '%' : '...'}`],
+    downloaded: ['ready', '업데이트 준비 완료 (재시작 시 적용)'],
     none: ['', ''],
-    error: ['info', '⚠️ 업데이트 확인 실패']
+    error: ['info', '업데이트 확인 실패']
   };
   const [cls, txt] = map[status] || ['', ''];
   if (!txt) { badge.classList.add('hidden'); return; }

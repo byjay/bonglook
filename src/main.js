@@ -50,9 +50,9 @@ let lastCheckIso = new Date().toISOString();
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280, height: 860, minWidth: 980, minHeight: 640,
-    title: 'Outlook AI 어시스턴트',
+    title: 'Outlook',
     icon: path.join(__dirname, 'renderer', 'assets', 'icon.ico'),
-    backgroundColor: '#0f172a',
+    backgroundColor: '#ffffff',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true, nodeIntegration: false, sandbox: false

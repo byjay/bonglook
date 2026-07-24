@@ -3,93 +3,124 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
-  <title>Outlook AI 어시스턴트</title>
+  <title>Outlook</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app">
 
-    <!-- ===================== 상단 타이틀/리본 ===================== -->
+    <!-- ===================== 타이틀바 ===================== -->
     <div id="titlebar">
       <div class="tb-left">
-        <span class="tb-logo">📧</span>
-        <span class="tb-title">Outlook AI 어시스턴트 <span id="app-version" class="tb-ver"></span></span>
+        <span class="tb-logo">
+          <svg viewBox="0 0 24 24" width="18" height="18"><rect x="1" y="4" width="22" height="16" rx="2" fill="#0078d4"/><path d="M3 7l9 6 9-6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="tb-title">Outlook <span id="app-version" class="tb-ver"></span></span>
       </div>
       <div class="tb-search">
-        <span class="tb-search-ic">🔍</span>
-        <input id="global-search" type="text" placeholder="메일 검색 (제목·보낸사람·내용, 한·영·중)" />
+        <span class="tb-search-ic">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </span>
+        <input id="global-search" type="text" placeholder="검색" />
       </div>
       <div class="tb-right">
-        <span id="conn-pill" class="conn-pill" title="연결 상태">● 확인 중</span>
+        <span id="conn-pill" class="conn-pill" title="연결 상태"><span class="cp-dot"></span> 확인 중</span>
       </div>
     </div>
 
+    <!-- ===================== 메뉴 탭 행 ===================== -->
+    <nav id="menu-tabs">
+      <button class="menu-tab" type="button">파일</button>
+      <button class="menu-tab active" type="button">홈</button>
+      <button class="menu-tab" type="button">보내기/받기</button>
+      <button class="menu-tab" type="button">폴더</button>
+      <button class="menu-tab" type="button">보기</button>
+      <button class="menu-tab" type="button">도움말</button>
+    </nav>
+
     <!-- ===================== 리본(명령바) ===================== -->
     <div id="ribbon">
-      <div class="rb-group">
-        <button id="rb-new" class="rb-btn rb-primary" title="새 메일 / 대화 시작"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>새 메일</span></button>
+      <div class="rb-block">
+        <div class="rb-row">
+          <button id="rb-new" class="rb-btn rb-big rb-primary" title="새 메일"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>새 메일</span></button>
+        </div>
+        <div class="rb-glabel">새로 만들기</div>
       </div>
       <span class="rb-sep"></span>
-      <div class="rb-group">
-        <button id="rb-sync" class="rb-btn" title="Outlook/PST에서 메일을 로컬 DB로 동기화"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>동기화</span></button>
-        <button id="rb-checknew" class="rb-btn" title="새 메일 확인"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M3 6l9 6 9-6"/><circle cx="19" cy="6" r="3" fill="currentColor" stroke="none"/></svg><span>새 메일 확인</span></button>
+      <div class="rb-block">
+        <div class="rb-row">
+          <button id="rb-reply" class="rb-btn" title="답장" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg><span>답장</span></button>
+          <button id="rb-translate" class="rb-btn" title="번역" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>번역</span></button>
+        </div>
+        <div class="rb-glabel">응답</div>
       </div>
       <span class="rb-sep"></span>
-      <div class="rb-group">
-        <button id="rb-reply" class="rb-btn" title="선택 메일 답장 초안" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg><span>답장 초안</span></button>
-        <button id="rb-translate" class="rb-btn" title="선택 메일 번역/분석" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>번역·분석</span></button>
-        <button id="rb-brief" class="rb-btn" title="메일 요약"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>요약</span></button>
+      <div class="rb-block">
+        <div class="rb-row">
+          <button id="rb-sync" class="rb-btn" title="동기화"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg><span>동기화</span></button>
+          <button id="rb-checknew" class="rb-btn" title="새 메일 확인"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M3 6l9 6 9-6"/></svg><span>보내기/받기</span></button>
+          <button id="rb-brief" class="rb-btn" title="요약"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg><span>요약</span></button>
+        </div>
+        <div class="rb-glabel">도구</div>
       </div>
       <span class="rb-sep"></span>
-      <!-- PST/소스 전환 — 요청대로 상단에 바로 노출 -->
-      <div class="rb-group rb-source">
-        <span class="rb-label">데이터:</span>
-        <button id="rb-src-outlook" class="rb-toggle active" data-src="outlook" title="실행 중인 Outlook에서 실시간 읽기"><svg class="tg-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>Outlook 실시간</span></button>
-        <button id="rb-src-pst" class="rb-toggle" data-src="pst" title="PST 파일 직접 읽기"><svg class="tg-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>PST 파일</span></button>
+      <!-- PST/소스 전환 -->
+      <div class="rb-source">
+        <button id="rb-src-outlook" class="rb-toggle active" data-src="outlook" title="실행 중인 Outlook에서 실시간 읽기"><svg class="tg-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg><span>실시간</span></button>
+        <button id="rb-src-pst" class="rb-toggle" data-src="pst" title="PST 파일 직접 읽기"><svg class="tg-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>PST</span></button>
         <span id="rb-pst-name" class="rb-pst-name hidden"></span>
       </div>
     </div>
 
-    <!-- ===================== 본문 3단 ===================== -->
+    <!-- ===================== 본문 (폴더 트리 + 콘텐츠) ===================== -->
     <div id="body">
-
-      <!-- 좌측 아이콘 레일 (Outlook 스타일 SVG 아이콘) -->
-      <nav id="rail">
-        <button class="rail-btn active" data-view="mail" title="메일">
-          <svg class="rail-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><path d="M3 6l9 6 9-6"/></svg>
-          <em>메일</em>
-        </button>
-        <button class="rail-btn" data-view="chat" title="AI 대화">
-          <svg class="rail-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
-          <em>대화</em>
-        </button>
-        <button class="rail-btn" data-view="dashboard" title="대시보드">
-          <svg class="rail-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-          <em>현황</em>
-        </button>
-        <button class="rail-btn" data-view="contacts" title="주소록">
-          <svg class="rail-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <em>주소록</em>
-        </button>
-        <span class="rail-spacer"></span>
-        <button class="rail-btn" data-view="settings" title="설정">
-          <svg class="rail-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          <em>설정</em>
-        </button>
-      </nav>
 
       <!-- 폴더 트리 창 -->
       <aside id="folders">
-        <div class="fld-head">폴더</div>
-        <button class="fld-item active" data-folder="all"><span class="fld-ic">📥</span> 전체 메일 <span class="fld-count" id="cnt-all">0</span></button>
-        <button class="fld-item" data-folder="Inbox"><span class="fld-ic">📩</span> 받은 편지함 <span class="fld-count" id="cnt-inbox">0</span></button>
-        <button class="fld-item" data-folder="Sent"><span class="fld-ic">📤</span> 보낸 편지함 <span class="fld-count" id="cnt-sent">0</span></button>
-        <button class="fld-item" data-folder="__attach"><span class="fld-ic">📎</span> 첨부 있는 메일 <span class="fld-count" id="cnt-attach">0</span></button>
+        <!-- 즐겨찾기 -->
+        <div class="fld-section">
+          <div class="fld-head">즐겨찾기</div>
+          <button class="fld-item active" data-folder="Inbox"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          </span> 받은 편지함 <span class="fld-count" id="cnt-inbox">0</span></button>
+          <button class="fld-item" data-folder="Sent"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </span> 보낸 편지함 <span class="fld-count" id="cnt-sent">0</span></button>
+        </div>
 
-        <div class="fld-head" style="margin-top:14px;">도구</div>
-        <button class="fld-item" data-nav="dashboard"><span class="fld-ic">📊</span> 대시보드 & 요약</button>
-        <button class="fld-item" data-nav="chat"><span class="fld-ic">💬</span> 메일 검색</button>
-        <button class="fld-item" data-nav="contacts"><span class="fld-ic">👥</span> 주소록</button>
+        <!-- 계정 트리 -->
+        <div class="fld-section">
+          <div class="fld-head fld-acct"><span class="fld-caret">▾</span> 내 계정</div>
+          <button class="fld-item fld-sub active" data-folder="all"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/></svg>
+          </span> 전체 메일 <span class="fld-count" id="cnt-all">0</span></button>
+          <button class="fld-item fld-sub" data-folder="Inbox"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+          </span> 받은 편지함</button>
+          <button class="fld-item fld-sub" data-folder="Sent"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </span> 보낸 편지함</button>
+          <button class="fld-item fld-sub" data-folder="__attach"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </span> 첨부 있는 메일 <span class="fld-count" id="cnt-attach">0</span></button>
+        </div>
+
+        <!-- 기타 (뷰 전환) -->
+        <div class="fld-section">
+          <div class="fld-head">기타</div>
+          <button class="fld-item" data-nav="dashboard"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+          </span> 대시보드 & 요약</button>
+          <button class="fld-item" data-nav="chat"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
+          </span> 메일 검색</button>
+          <button class="fld-item" data-nav="contacts"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </span> 주소록</button>
+          <button class="fld-item" data-nav="settings"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          </span> 설정</button>
+        </div>
 
         <div class="fld-foot">
           <div id="sync-info" class="sync-info">동기화 필요</div>
@@ -107,19 +138,19 @@
           <div class="mail-list-pane">
             <div class="mlp-head">
               <span id="mlp-title">전체 메일</span>
-              <span id="realtime-dot" class="realtime-dot hidden" title="실시간 감시 중">🟢 실시간</span>
+              <span id="realtime-dot" class="realtime-dot hidden" title="실시간 감시 중"><span class="rt-dot"></span> 실시간</span>
               <label class="mlp-attach"><input type="checkbox" id="filter-attach" /> 첨부만</label>
             </div>
             <div id="mail-list" class="mail-list">
-              <div class="empty">🔄 상단 <b>동기화</b> 후 메일이 여기에 표시됩니다.</div>
+              <div class="empty">상단 <b>동기화</b> 후 메일이 여기에 표시됩니다.</div>
             </div>
           </div>
           <!-- 읽기 창 -->
           <div class="reading-pane" id="reading-pane">
             <div class="rp-empty" id="rp-empty">
-              <div class="rp-empty-ic">✉️</div>
+              <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg></div>
               <div>왼쪽에서 메일을 선택하면 여기에 내용이 표시됩니다.</div>
-              <div class="rp-empty-sub">메일이 없으면 상단 <b>🔄 동기화</b>를 먼저 실행하세요.</div>
+              <div class="rp-empty-sub">메일이 없으면 상단 <b>동기화</b>를 먼저 실행하세요.</div>
             </div>
             <div id="rp-content" class="rp-content hidden"></div>
           </div>
@@ -148,8 +179,8 @@
             <div class="empty">먼저 상단 <b>동기화</b>로 메일을 가져온 뒤 <b>요약 생성</b>을 눌러주세요.</div>
           </div>
           <div class="dash-cols">
-            <div class="dash-box"><h3>👤 주요 발신자</h3><div id="top-senders" class="top-senders"></div></div>
-            <div class="dash-box"><h3>🌐 언어별 분포</h3><div id="lang-dist" class="lang-dist"></div></div>
+            <div class="dash-box"><h3>주요 발신자</h3><div id="top-senders" class="top-senders"></div></div>
+            <div class="dash-box"><h3>언어별 분포</h3><div id="lang-dist" class="lang-dist"></div></div>
           </div>
         </div>
 
@@ -162,13 +193,13 @@
                 <b>이렇게 물어보세요:</b><br>
                 • "결제 관련 메일 찾아줘"<br>
                 • "홍길동이 보낸 메일 요약해줘"<br>
-                • 아래 📎 버튼으로 파일을 직접 올려 분석도 가능합니다 (최대 5개)
+                • 아래 + 버튼으로 파일을 직접 올려 분석도 가능합니다 (최대 5개)
               </div>
             </div>
           </div>
           <div id="pending-files" class="pending-files"></div>
           <div class="chat-input-bar">
-            <button id="btn-attach" title="파일 첨부 (최대 5개)">📎</button>
+            <button id="btn-attach" title="파일 첨부 (최대 5개)">+</button>
             <textarea id="chat-input" rows="1" placeholder="메일을 검색하거나 질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
             <button id="btn-send" class="btn-primary">전송</button>
           </div>
@@ -177,27 +208,27 @@
         <!-- ===== 주소록 뷰 ===== -->
         <div id="view-contacts" class="view scroll-view">
           <header class="view-header">
-            <h1>👥 주소록</h1>
+            <h1>주소록</h1>
             <div class="search-row">
               <input id="contact-search" type="text" placeholder="이름/이메일/회사 검색" />
               <button id="btn-contact-search" class="btn-primary">검색</button>
-              <button id="btn-contact-import">📥 Outlook에서 가져오기</button>
+              <button id="btn-contact-import">Outlook에서 가져오기</button>
             </div>
           </header>
           <div id="contact-list" class="contact-list">
-            <div class="empty">📥 <b>Outlook에서 가져오기</b>를 누르거나, 메일 동기화 시 발신자가 자동 축적됩니다.</div>
+            <div class="empty"><b>Outlook에서 가져오기</b>를 누르거나, 메일 동기화 시 발신자가 자동 축적됩니다.</div>
           </div>
         </div>
 
         <!-- ===== 설정 뷰 ===== -->
         <div id="view-settings" class="view scroll-view">
           <header class="view-header">
-            <h1>⚙️ 설정</h1>
+            <h1>설정</h1>
             <p class="hint">Cerebras API 키를 최대 5개까지 입력하세요. 앞 키가 실패하면 자동으로 다음 키를 사용합니다.</p>
           </header>
 
           <div class="settings-card">
-            <h2>🔑 Cerebras API 키 (최대 5개)</h2>
+            <h2>API 키 (최대 5개)</h2>
             <div class="key-inputs">
               <label>키 1 <input type="password" class="api-key" data-idx="0" placeholder="csk-..." /></label>
               <label>키 2 <input type="password" class="api-key" data-idx="1" placeholder="csk-... (선택)" /></label>
@@ -209,22 +240,22 @@
           </div>
 
           <div class="settings-card">
-            <h2>📂 메일 데이터 소스</h2>
+            <h2>메일 데이터 소스</h2>
             <div class="radio-group">
               <label><input type="radio" name="source" value="outlook" checked />
-                <b>Outlook 연동 (실시간)</b> — PC의 Outlook이 열고 있는 데이터를 실시간으로 읽습니다. 새 메일 자동 수신 ✅</label>
+                <b>Outlook 연동 (실시간)</b> — PC의 Outlook이 열고 있는 데이터를 실시간으로 읽습니다. 새 메일 자동 수신</label>
               <label><input type="radio" name="source" value="pst" />
                 <b>PST 파일 직접</b> — Outlook을 켜지 않아도 .pst 파일을 직접 읽습니다. (실시간 아님)</label>
             </div>
             <div id="pst-row" class="pst-row hidden">
               <input id="pst-path" type="text" placeholder="PST 파일 경로 (예: C:\\Users\\...\\Outlook.pst)" readonly />
-              <button id="btn-pick-pst">📁 찾기</button>
+              <button id="btn-pick-pst">찾기</button>
             </div>
             <div id="conn-status" class="conn-status"></div>
           </div>
 
           <div class="settings-card">
-            <h2>📅 읽어올 기간</h2>
+            <h2>읽어올 기간</h2>
             <p class="hint" style="margin-bottom:12px;">PST 용량이 크면 기본(최근 6개월)을 권장합니다.</p>
             <div class="radio-group">
               <label><input type="radio" name="dateMode" value="6months" checked /> <b>최근 6개월</b> (기본·권장)</label>
@@ -238,7 +269,7 @@
           </div>
 
           <div class="settings-card">
-            <h2>🔔 실시간 새 메일</h2>
+            <h2>실시간 새 메일</h2>
             <label class="inline-check"><input type="checkbox" id="realtime-toggle" checked /> 새 메일 자동 확인 (Outlook 모드)</label>
             <label class="inline-num">확인 주기(초)
               <input id="realtime-interval" type="number" min="15" max="600" value="60" />
@@ -252,16 +283,33 @@
               <option value="llama3.1-8b">llama3.1-8b (빠름)</option>
               <option value="qwen-3-32b">qwen-3-32b</option>
             </select>
-            <h2 style="margin-top:18px;">📥 동기화 시 불러올 최대 메일 수</h2>
+            <h2 style="margin-top:18px;">동기화 시 불러올 최대 메일 수</h2>
             <input id="max-mails" type="number" min="10" max="20000" value="2000" />
-            <h2 style="margin-top:18px;">📎 동기화 시 첨부(도면 등) 자동 저장</h2>
+            <h2 style="margin-top:18px;">동기화 시 첨부(도면 등) 자동 저장</h2>
             <label class="inline-check"><input type="checkbox" id="save-attach-toggle" checked /> 첨부파일을 로컬에 자동 저장하고 텍스트 추출</label>
           </div>
 
+          <div class="settings-card">
+            <h2>관리자 정보 · 진단</h2>
+            <div class="admin-grid">
+              <div class="admin-row"><span class="admin-k">앱 버전</span><span class="admin-v" id="admin-version">-</span></div>
+              <div class="admin-row"><span class="admin-k">데이터베이스</span><span class="admin-v" id="admin-db">-</span></div>
+              <div class="admin-row"><span class="admin-k">DB 경로</span><span class="admin-v admin-path" id="admin-db-path">-</span></div>
+              <div class="admin-row"><span class="admin-k">전문검색(FTS)</span><span class="admin-v" id="admin-fts">-</span></div>
+              <div class="admin-row"><span class="admin-k">저장된 메일</span><span class="admin-v" id="admin-mailcount">-</span></div>
+              <div class="admin-row"><span class="admin-k">마지막 동기화</span><span class="admin-v" id="admin-lastsync">-</span></div>
+            </div>
+            <div class="admin-actions">
+              <button id="btn-admin-testconn">연결 테스트</button>
+              <button id="btn-admin-openattach">첨부 폴더 열기</button>
+              <button id="btn-admin-refresh">진단 새로고침</button>
+            </div>
+          </div>
+
           <div class="settings-actions">
-            <button id="btn-save-settings" class="btn-primary">💾 저장</button>
-            <button id="btn-check-update">⬇️ 업데이트 확인</button>
-            <span id="settings-saved" class="saved-msg hidden">✅ 저장되었습니다</span>
+            <button id="btn-save-settings" class="btn-primary">저장</button>
+            <button id="btn-check-update">업데이트 확인</button>
+            <span id="settings-saved" class="saved-msg hidden">저장되었습니다</span>
           </div>
         </div>
 

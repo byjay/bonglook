@@ -13,9 +13,9 @@
     "dist:publish": "electron-builder --win --x64 --publish always"
   },
   "build": {
-    "appId": "com.you.outlook-ai-assistant",
-    "productName": "Outlook AI 어시스턴트",
-    "artifactName": "OutlookAI-Setup-${version}.${ext}",
+    "appId": "com.you.outlook-mail-client",
+    "productName": "Outlook",
+    "artifactName": "Outlook-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -47,7 +47,7 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Outlook AI 어시스턴트"
+      "shortcutName": "Outlook"
     },
     "publish": {
       "provider": "github",
