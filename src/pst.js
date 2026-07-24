@@ -125,7 +125,7 @@ async function searchMails(pstPath, query, limit = 50, dateFilter = { mode: '6mo
 // ------------------------------------------------------------
 //  특정 메일 상세 + 첨부 저장 (entryId 해시로 재탐색)
 // ------------------------------------------------------------
-async function getMailDetailAndAttachments(pstPath, entryId, saveAttach = false) {
+async function getMailDetailAndAttachments(pstPath, entryId, saveAttach = false, saveDir = null) {
   if (!pstPath || !fs.existsSync(pstPath)) throw new Error('PST 파일 없음: ' + pstPath);
   const { PSTFile } = require('pst-extractor');
   const pstFile = new PSTFile(pstPath);
@@ -164,7 +164,7 @@ async function getMailDetailAndAttachments(pstPath, entryId, saveAttach = false)
       const fname = att.longFilename || att.filename || `attachment_${i}`;
       attachments.push({ name: fname, size: att.filesize || 0 });
       if (saveAttach) {
-        const tmpDir = path.join(os.tmpdir(), 'outlook-ai-attach', Date.now().toString());
+        const tmpDir = saveDir || path.join(os.tmpdir(), 'outlook-ai-attach', Date.now().toString());
         fs.mkdirSync(tmpDir, { recursive: true });
         const outPath = path.join(tmpDir, fname);
         const stream = att.fileInputStream;

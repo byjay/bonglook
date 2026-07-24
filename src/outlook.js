@@ -54,10 +54,22 @@ function parseJsonOutput(raw) {
 }
 
 // ------------------------------------------------------------
-//  날짜 필터 → Outlook Restrict 용 조건 문자열 생성
+//  날짜 필터 → Outlook Restrict 용 DASL 조건 문자열 생성
 //  dateFilter: { mode: '6months'|'all'|'range', start?, end? }
-//  반환: PowerShell 에서 Items.Restrict() 에 넣을 DASL/필터 문자열 (없으면 null)
+//  반환: PowerShell 에서 Items.Restrict() 에 넣을 DASL 문자열 (없으면 null)
+//
+//  ★ 로케일 독립성:
+//     기존 "[ReceivedTime] >= 'M/D/YYYY'" 방식은 미국식 날짜 형식이라
+//     한국 로케일 Windows/Outlook 에서 Restrict() 가 오작동할 수 있음.
+//     → DASL 쿼리(@SQL) + urn:schemas:httpmail:datereceived 사용.
+//       DASL 은 항상 "yyyy/MM/dd HH:mm" 형식을 요구하며 로케일 무관하게 동작.
 // ------------------------------------------------------------
+// DASL 날짜 형식(로케일 독립): yyyy/MM/dd HH:mm
+function daslDate(dt) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}/${pad(dt.getMonth() + 1)}/${pad(dt.getDate())} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+
 function buildDateFilter(dateFilter) {
   const mode = (dateFilter && dateFilter.mode) || '6months';
   if (mode === 'all') return null; // 필터 없음 = 전체
@@ -73,12 +85,14 @@ function buildDateFilter(dateFilter) {
     if (dateFilter.end) { endDate = new Date(dateFilter.end); endDate.setHours(23, 59, 59); }
   }
 
-  // Outlook Restrict 형식: "[ReceivedTime] >= '2024/01/01 00:00'"
-  const fmt = (dt) => `${dt.getMonth() + 1}/${dt.getDate()}/${dt.getFullYear()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+  // DASL 쿼리 (로케일 독립): urn:schemas:httpmail:datereceived
+  const prop = 'urn:schemas:httpmail:datereceived';
   const parts = [];
-  if (startDate) parts.push(`[ReceivedTime] >= '${fmt(startDate)}'`);
-  if (endDate) parts.push(`[ReceivedTime] <= '${fmt(endDate)}'`);
-  return parts.length ? parts.join(' AND ') : null;
+  if (startDate) parts.push(`"${prop}" >= '${daslDate(startDate)}'`);
+  if (endDate) parts.push(`"${prop}" <= '${daslDate(endDate)}'`);
+  if (!parts.length) return null;
+  // @SQL= 접두사 → Outlook 이 DASL 쿼리로 해석
+  return `@SQL=` + parts.join(' AND ');
 }
 
 // ------------------------------------------------------------
@@ -88,6 +102,7 @@ function buildDateFilter(dateFilter) {
 async function searchMails(query, limit = 50, dateFilter = { mode: '6months' }) {
   const safeQuery = String(query || '').replace(/'/g, "''");
   const restrictFilter = buildDateFilter(dateFilter);
+  // DASL 문자열 안의 큰따옴표(")를 PowerShell 이중따옴표 문자열용으로 이스케이프
   const restrictLine = restrictFilter
     ? `$items = $items.Restrict("${restrictFilter.replace(/"/g, '`"')}")`
     : '# 날짜 필터 없음 (전체)';
@@ -146,7 +161,10 @@ try {
 // ------------------------------------------------------------
 async function getNewMailsSince(sinceIso, limit = 30) {
   const since = new Date(sinceIso || Date.now() - 3600000);
-  const fmt = `${since.getMonth() + 1}/${since.getDate()}/${since.getFullYear()} ${String(since.getHours()).padStart(2,'0')}:${String(since.getMinutes()).padStart(2,'0')}`;
+  // DASL 로케일 독립 형식 (yyyy/MM/dd HH:mm)
+  const dasl = daslDate(since);
+  const restrict = `@SQL="urn:schemas:httpmail:datereceived" > '${dasl}'`;
+  const restrictLine = `$items = $items.Restrict("${restrict.replace(/"/g, '`"')}")`;
   const script = `
 $ErrorActionPreference = 'Stop'
 try {
@@ -155,7 +173,7 @@ try {
   $inbox = $ns.GetDefaultFolder(6)
   $items = $inbox.Items
   $items.Sort("[ReceivedTime]", $true)
-  $items = $items.Restrict("[ReceivedTime] > '${fmt}'")
+  ${restrictLine}
   $result = New-Object System.Collections.ArrayList
   $count = 0
   foreach ($m in $items) {
@@ -279,7 +297,136 @@ try {
   return parsed[0] || { ok: false, error: '알 수 없는 오류' };
 }
 
+// ------------------------------------------------------------
+//  6) 주소록 가져오기 (Outlook 연락처 + GAL 캐시)
+//     Outlook 기본 연락처 폴더(olFolderContacts=10) 순회
+// ------------------------------------------------------------
+async function getContacts(limit = 5000) {
+  const script = `
+$ErrorActionPreference = 'Stop'
+try {
+  $ol = New-Object -ComObject Outlook.Application
+  $ns = $ol.GetNamespace("MAPI")
+  $result = New-Object System.Collections.ArrayList
+  $count = 0
+  $folder = $ns.GetDefaultFolder(10)   # olFolderContacts
+  foreach ($c in $folder.Items) {
+    if ($count -ge ${limit}) { break }
+    if ($c.Class -ne 40) { continue }   # olContact
+    $email = if ($c.Email1Address) { $c.Email1Address } else { '' }
+    if ($email -eq '') { continue }
+    $obj = [PSCustomObject]@{
+      name= if ($c.FullName) { $c.FullName } else { $c.CompanyName }
+      email=$email
+      company= if ($c.CompanyName) { $c.CompanyName } else { '' }
+      phone= if ($c.BusinessTelephoneNumber) { $c.BusinessTelephoneNumber } elseif ($c.MobileTelephoneNumber) { $c.MobileTelephoneNumber } else { '' }
+    }
+    [void]$result.Add($obj); $count++
+  }
+  $result | ConvertTo-Json -Depth 4 -Compress
+} catch {
+  Write-Output ('{"__error__":"' + ($_.Exception.Message -replace '"','\\"') + '"}')
+}
+`;
+  const raw = await runPowerShell(script);
+  const parsed = parseJsonOutput(raw);
+  if (parsed.length === 1 && parsed[0] && parsed[0].__error__) {
+    throw new Error('주소록 오류: ' + parsed[0].__error__);
+  }
+  return parsed.filter(c => c && c.email);
+}
+
+// ------------------------------------------------------------
+//  7) 계정/설정 정보 가져오기 (계정, 서명, 저장소 목록)
+// ------------------------------------------------------------
+async function getAccountSettings() {
+  const script = `
+$ErrorActionPreference = 'Stop'
+try {
+  $ol = New-Object -ComObject Outlook.Application
+  $ns = $ol.GetNamespace("MAPI")
+  $accounts = New-Object System.Collections.ArrayList
+  foreach ($a in $ns.Accounts) {
+    [void]$accounts.Add([PSCustomObject]@{
+      displayName=$a.DisplayName
+      smtpAddress= if ($a.SmtpAddress) { $a.SmtpAddress } else { '' }
+      accountType=$a.AccountType
+    })
+  }
+  $stores = New-Object System.Collections.ArrayList
+  foreach ($s in $ns.Stores) {
+    [void]$stores.Add([PSCustomObject]@{ name=$s.DisplayName; path=$s.FilePath })
+  }
+  # 서명 파일(있으면) 목록
+  $sigDir = Join-Path $env:APPDATA 'Microsoft\\Signatures'
+  $sigs = @()
+  if (Test-Path $sigDir) {
+    $sigs = Get-ChildItem -Path $sigDir -Filter *.txt -ErrorAction SilentlyContinue | ForEach-Object { $_.BaseName }
+  }
+  [PSCustomObject]@{ ok=$true; accounts=$accounts; stores=$stores; signatures=$sigs } | ConvertTo-Json -Depth 5 -Compress
+} catch {
+  Write-Output ('{"ok":false,"error":"' + ($_.Exception.Message -replace '"','\\"') + '"}')
+}
+`;
+  const raw = await runPowerShell(script);
+  const parsed = parseJsonOutput(raw);
+  return parsed[0] || { ok: false, error: '알 수 없는 오류' };
+}
+
+// ------------------------------------------------------------
+//  8) 전체 메일 스캔 (여러 폴더 순회) - 동기화용
+//     folderType: 6=Inbox, 5=SentItems. dateFilter 적용.
+//     반환: 표준 메일 배열 (folder 필드 포함)
+// ------------------------------------------------------------
+async function scanFolder(folderType, dateFilter = { mode: '6months' }, limit = 2000) {
+  const restrictFilter = buildDateFilter(dateFilter);
+  const restrictLine = restrictFilter
+    ? `$items = $items.Restrict("${restrictFilter.replace(/"/g, '`"')}")`
+    : '# 날짜 필터 없음 (전체)';
+  const script = `
+$ErrorActionPreference = 'Stop'
+try {
+  $ol = New-Object -ComObject Outlook.Application
+  $ns = $ol.GetNamespace("MAPI")
+  $folder = $ns.GetDefaultFolder(${folderType})
+  $items = $folder.Items
+  $items.Sort("[ReceivedTime]", $true)
+  ${restrictLine}
+  $folderName = $folder.Name
+  $result = New-Object System.Collections.ArrayList
+  $count = 0
+  foreach ($m in $items) {
+    if ($count -ge ${limit}) { break }
+    if ($m.Class -ne 43) { continue }
+    $bodyPrev = if ($m.Body) { $m.Body.Substring(0, [Math]::Min(600, $m.Body.Length)) } else { '' }
+    $obj = [PSCustomObject]@{
+      entryId=$m.EntryID; folder=$folderName
+      subject= if ($m.Subject) { $m.Subject } else { '' }
+      sender= if ($m.SenderName) { $m.SenderName } else { '' }
+      senderMail= if ($m.SenderEmailAddress) { $m.SenderEmailAddress } else { '' }
+      to= if ($m.To) { $m.To } else { '' }
+      cc= if ($m.CC) { $m.CC } else { '' }
+      received= if ($m.ReceivedTime) { $m.ReceivedTime.ToString("yyyy-MM-dd HH:mm") } else { '' }
+      hasAttach=($m.Attachments.Count -gt 0); attachCount=$m.Attachments.Count
+      preview=$bodyPrev; body= if ($m.Body) { $m.Body } else { '' }; unread=$m.UnRead
+    }
+    [void]$result.Add($obj); $count++
+  }
+  $result | ConvertTo-Json -Depth 4 -Compress
+} catch {
+  Write-Output ('{"__error__":"' + ($_.Exception.Message -replace '"','\\"') + '"}')
+}
+`;
+  const raw = await runPowerShell(script);
+  const parsed = parseJsonOutput(raw);
+  if (parsed.length === 1 && parsed[0] && parsed[0].__error__) {
+    throw new Error('Outlook 폴더 스캔 오류: ' + parsed[0].__error__);
+  }
+  return parsed.map(m => ({ ...m, source: 'outlook' }));
+}
+
 module.exports = {
   searchMails, getNewMailsSince, getMailDetail, saveAttachments,
-  checkConnection, buildDateFilter
+  checkConnection, buildDateFilter,
+  getContacts, getAccountSettings, scanFolder
 };

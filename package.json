@@ -7,6 +7,8 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild": "electron-builder install-app-deps",
     "dist": "electron-builder --win --x64",
     "dist:publish": "electron-builder --win --x64 --publish always"
   },
@@ -22,11 +24,18 @@
       "node_modules/**/*",
       "package.json"
     ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**",
+      "**/*.node"
+    ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "src/renderer/assets/icon.ico"
@@ -51,11 +60,13 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "electron-updater": "^6.2.1",
+    "better-sqlite3": "^11.10.0",
     "electron-store": "^8.2.0",
-    "pst-extractor": "^1.11.0",
+    "electron-updater": "^6.2.1",
+    "mammoth": "^1.8.0",
     "pdf-parse": "^1.1.1",
-    "xlsx": "^0.18.5",
-    "mammoth": "^1.8.0"
+    "pdfjs-dist": "^4.0.379",
+    "pst-extractor": "^1.11.0",
+    "xlsx": "^0.18.5"
   }
 }

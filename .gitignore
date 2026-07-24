@@ -5,3 +5,8 @@ dist/
 .DS_Store
 .env
 .dev.vars
+data/
+attachments/
+*.db
+*.db-wal
+*.db-shm

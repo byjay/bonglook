@@ -15,6 +15,9 @@ const outlook = require('./outlook');       // Outlook COM (실시간)
 const pst = require('./pst');               // PST 파일 직접 파싱
 const attachments = require('./attachments'); // 첨부 분석
 const cerebras = require('./cerebras');     // Cerebras (키 5개 폴백)
+const db = require('./db');                 // 로컬 SQLite DB (색인/저장)
+const sync = require('./sync');             // 동기화 엔진
+const analyzer = require('./analyzer');     // AI 분석(브리핑/번역/답장)
 
 // 로컬 설정 저장 (PIN/인증 없음 — 로컬 전용)
 const store = new Store({
@@ -22,7 +25,7 @@ const store = new Store({
   defaults: {
     apiKeys: ['', '', '', '', ''],
     model: 'llama-3.3-70b',
-    maxMails: 50,
+    maxMails: 2000,
     // 연동 방식: 'outlook'(COM,실시간) | 'pst'(파일직접)
     source: 'outlook',
     pstPath: '',
@@ -30,9 +33,15 @@ const store = new Store({
     dateFilter: { mode: '6months', start: '', end: '' },
     // 실시간 새 메일 확인
     realtime: true,
-    realtimeIntervalSec: 60
+    realtimeIntervalSec: 60,
+    // 동기화 시 첨부(도면 등) 자동 저장
+    saveAttachmentsOnSync: true
   }
 });
+
+// DB 초기화 상태
+let dbReady = false;
+let dbInitError = '';
 
 let mainWindow = null;
 let realtimeTimer = null;
@@ -57,6 +66,17 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // DB 초기화 (userData 하위)
+  try {
+    const userData = app.getPath('userData');
+    db.init(userData);
+    sync.setAttachRoot(path.join(userData, 'attachments'));
+    dbReady = true;
+  } catch (e) {
+    dbInitError = String(e && e.message ? e.message : e);
+    console.error('DB 초기화 실패:', dbInitError);
+  }
+
   createWindow();
   try { autoUpdater.autoDownload = true; autoUpdater.checkForUpdatesAndNotify(); }
   catch (e) { console.error('업데이트 체크 실패:', e); }
@@ -70,6 +90,7 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (realtimeTimer) clearInterval(realtimeTimer);
+  try { db.close(); } catch (_) {}
   if (process.platform !== 'darwin') app.quit();
 });
 
@@ -87,7 +108,7 @@ function startRealtimeIfNeeded() {
 
   realtimeTimer = setInterval(async () => {
     try {
-      const newMails = await outlook.getNewMailsSince(lastCheckIso, 30);
+      const newMails = await sync.syncNew(lastCheckIso, 50); // DB 저장 포함
       lastCheckIso = new Date().toISOString();
       if (newMails && newMails.length > 0) {
         // 렌더러에 알림
@@ -256,4 +277,167 @@ ipcMain.handle('app:getVersion', () => app.getVersion());
 ipcMain.handle('app:checkUpdate', async () => {
   try { await autoUpdater.checkForUpdates(); return { ok: true }; }
   catch (e) { return { ok: false, error: String(e) }; }
+});
+
+// ============================================================
+//  확장 IPC: DB / 동기화 / AI 분석 / 주소록 / 설정
+// ============================================================
+function requireDb() {
+  if (!dbReady) throw new Error('DB가 초기화되지 않았습니다: ' + (dbInitError || 'better-sqlite3 재빌드 필요(npm run rebuild)'));
+}
+function getKeys() { return (store.get('apiKeys') || []).filter(k => k && k.trim()); }
+function getModel() { return store.get('model') || 'llama-3.3-70b'; }
+
+// --- DB 상태 ---
+ipcMain.handle('db:status', () => ({ ready: dbReady, error: dbInitError, path: dbReady ? db.dbPath : '', fts: dbReady ? db.ftsEnabled : false }));
+
+// --- 전체 동기화 (Outlook/PST → DB, 첨부 저장) ---
+ipcMain.handle('sync:run', async () => {
+  try {
+    requireDb();
+    const config = {
+      source: store.get('source'),
+      pstPath: store.get('pstPath'),
+      dateFilter: store.get('dateFilter') || { mode: '6months' },
+      maxMails: store.get('maxMails') || 2000,
+      saveAttachments: store.get('saveAttachmentsOnSync') !== false
+    };
+    const onProgress = (phase, cur, total, msg) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('sync-progress', { phase, cur, total, msg });
+      }
+    };
+    const result = await sync.syncAll(config, onProgress);
+    lastCheckIso = new Date().toISOString();
+    return result;
+  } catch (e) {
+    return { ok: false, error: String(e && e.message ? e.message : e) };
+  }
+});
+
+// --- DB 메일 검색 (색인 기반) ---
+ipcMain.handle('db:searchMails', (_e, opts) => {
+  try { requireDb(); return { ok: true, mails: db.searchMails(opts || {}) }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- DB 최근 메일 ---
+ipcMain.handle('db:recentMails', (_e, { limit, offset }) => {
+  try { requireDb(); return { ok: true, mails: db.recentMails(limit || 100, offset || 0) }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- DB 메일 상세 + 첨부 ---
+ipcMain.handle('db:getMail', (_e, { id }) => {
+  try {
+    requireDb();
+    const mail = db.getMailById(id);
+    if (!mail) return { ok: false, error: '메일을 찾을 수 없습니다.' };
+    const atts = db.getAttachmentsByMail(id);
+    const analyses = db.getAnalyses(id);
+    return { ok: true, mail, attachments: atts, analyses };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- 통계 (대시보드) ---
+ipcMain.handle('db:stats', () => {
+  try { requireDb(); return { ok: true, stats: db.stats(), lastSyncAt: db.getState('lastSyncAt') }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- AI 브리핑 (기간 내 메일 종합) ---
+ipcMain.handle('ai:briefing', async (_e, { mode }) => {
+  try {
+    requireDb();
+    const keys = getKeys();
+    if (!keys.length) return { ok: false, error: 'API 키가 설정되지 않았습니다.' };
+    // 기간 결정
+    let sinceTs, label;
+    const now = Date.now();
+    if (mode === 'week') { sinceTs = now - 7 * 864e5; label = '최근 7일'; }
+    else if (mode === 'today') { const d = new Date(); d.setHours(0,0,0,0); sinceTs = d.getTime(); label = '오늘'; }
+    else { sinceTs = now - 30 * 864e5; label = '최근 30일'; }
+    const mails = db.mailsInRange(sinceTs, null, 300);
+    const res = await analyzer.briefing({ keys, model: getModel(), mails, periodLabel: label });
+    if (res.ok) db.addAnalysis(null, 'briefing', res.content, 'ko', { mode, count: mails.length });
+    return { ...res, count: mails.length, period: label };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- AI 번역/분석 (특정 메일) ---
+ipcMain.handle('ai:translate', async (_e, { id }) => {
+  try {
+    requireDb();
+    const keys = getKeys();
+    if (!keys.length) return { ok: false, error: 'API 키가 설정되지 않았습니다.' };
+    const mail = db.getMailById(id);
+    if (!mail) return { ok: false, error: '메일을 찾을 수 없습니다.' };
+    const res = await analyzer.translateAnalyze({ keys, model: getModel(), mail });
+    if (res.ok) db.addAnalysis(id, 'translate', res.content, mail.lang || '');
+    return res;
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- AI 답장 초안 ---
+ipcMain.handle('ai:draftReply', async (_e, { id, instruction, tone, replyLang }) => {
+  try {
+    requireDb();
+    const keys = getKeys();
+    if (!keys.length) return { ok: false, error: 'API 키가 설정되지 않았습니다.' };
+    const mail = db.getMailById(id);
+    if (!mail) return { ok: false, error: '메일을 찾을 수 없습니다.' };
+    const res = await analyzer.draftReply({ keys, model: getModel(), mail, instruction, tone, replyLang });
+    if (res.ok) db.addAnalysis(id, 'reply', res.content, replyLang || mail.lang || '');
+    return res;
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- AI 대화형 질의 (DB 검색결과를 근거로) ---
+ipcMain.handle('ai:chatMails', async (_e, { question, history }) => {
+  try {
+    requireDb();
+    const keys = getKeys();
+    if (!keys.length) return { ok: false, error: 'API 키가 설정되지 않았습니다.' };
+    // 질문에서 키워드로 관련 메일 검색
+    const contextMails = db.searchMails({ query: question, limit: 12 });
+    const res = await analyzer.chatOverMails({ keys, model: getModel(), question, contextMails, history: history || [] });
+    return { ...res, contextCount: contextMails.length };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- 주소록 가져오기 (Outlook → DB) ---
+ipcMain.handle('contacts:import', async () => {
+  try {
+    requireDb();
+    if (store.get('source') !== 'outlook') {
+      return { ok: false, error: '주소록 가져오기는 Outlook 연동 모드에서만 지원됩니다.' };
+    }
+    const contacts = await outlook.getContacts(5000);
+    const n = db.upsertContactsBatch(contacts);
+    return { ok: true, imported: n, total: db.listContacts(1).length ? db.stats().contacts : n };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- 주소록 목록 (DB) ---
+ipcMain.handle('contacts:list', (_e, { query, limit }) => {
+  try { requireDb(); return { ok: true, contacts: db.listContacts(limit || 500, query || '') }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- Outlook 계정/설정 정보 가져오기 ---
+ipcMain.handle('outlook:getSettings', async () => {
+  try {
+    const s = await outlook.getAccountSettings();
+    return s;
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- 저장된 첨부/파일을 탐색기에서 열기 ---
+ipcMain.handle('shell:showItem', (_e, { path: p }) => {
+  try { shell.showItemInFolder(p); return { ok: true }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+ipcMain.handle('shell:openPath', async (_e, { path: p }) => {
+  try { const r = await shell.openPath(p); return { ok: !r, error: r }; }
+  catch (e) { return { ok: false, error: String(e.message || e) }; }
 });

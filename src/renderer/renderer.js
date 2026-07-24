@@ -4,14 +4,15 @@
 
 // ---------- 상태 ----------
 let config = {
-  apiKeys: ['', '', '', '', ''], model: 'llama-3.3-70b', maxMails: 50,
+  apiKeys: ['', '', '', '', ''], model: 'llama-3.3-70b', maxMails: 2000,
   source: 'outlook', pstPath: '',
   dateFilter: { mode: '6months', start: '', end: '' },
-  realtime: true, realtimeIntervalSec: 60
+  realtime: true, realtimeIntervalSec: 60, saveAttachmentsOnSync: true
 };
 let pendingFiles = [];          // 첨부 대기 파일 경로 (최대 5)
 let chatHistory = [];           // {role, content} - AI 대화 맥락
 let mailCache = [];             // 최근 검색된 메일 목록
+let briefMode = 'week';         // 브리핑 기간
 
 // ---------- DOM ----------
 const $ = (sel) => document.querySelector(sel);
@@ -74,29 +75,218 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // 새 메일 수동 확인
   $('#btn-check-new').addEventListener('click', checkNewMails);
+  $('#filter-attach').addEventListener('change', () => loadMails($('#mail-search').value));
+
+  // === 동기화 ===
+  $('#btn-sync').addEventListener('click', runSync);
+
+  // === 대시보드 / 브리핑 ===
+  $$('.brief-btn').forEach(b => b.addEventListener('click', () => {
+    $$('.brief-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    briefMode = b.dataset.mode;
+  }));
+  $('#btn-briefing').addEventListener('click', generateBriefing);
+
+  // === 주소록 ===
+  $('#btn-contact-import').addEventListener('click', importContacts);
+  $('#btn-contact-search').addEventListener('click', () => loadContacts($('#contact-search').value));
+  $('#contact-search').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadContacts($('#contact-search').value); });
+
+  // === 메일 상세 모달 ===
+  $('#modal-close').addEventListener('click', () => $('#mail-modal').classList.add('hidden'));
+  $('#mail-modal').addEventListener('click', (e) => { if (e.target.id === 'mail-modal') $('#mail-modal').classList.add('hidden'); });
 
   // 이벤트 수신
   window.api.onUpdateStatus(handleUpdateStatus);
   window.api.onNewMails(handleNewMails);
   window.api.onRealtimeError((err) => console.warn('실시간 확인 오류:', err));
+  window.api.onSyncProgress(handleSyncProgress);
 
-  // 연결 상태 확인
+  // 연결 상태 확인 + DB 상태 + 통계
   refreshConnectionStatus();
+  refreshDbStatus();
+  loadStats();
 });
+
+// ============================================================
+//  DB 상태 / 통계
+// ============================================================
+async function refreshDbStatus() {
+  try {
+    const s = await window.api.dbStatus();
+    const el = $('#sync-info');
+    if (!s.ready) {
+      el.textContent = '⚠️ DB 초기화 실패 (재빌드 필요)';
+      el.title = s.error || '';
+    }
+  } catch (_) {}
+}
+
+async function loadStats() {
+  try {
+    const r = await window.api.dbStats();
+    if (!r.ok) return;
+    const s = r.stats;
+    $('#stat-total').textContent = s.total;
+    $('#stat-unread').textContent = s.unread;
+    $('#stat-attach').textContent = s.withAttach;
+    $('#stat-contacts').textContent = s.contacts;
+
+    // 발신자 상위
+    const senders = $('#top-senders');
+    senders.innerHTML = (s.topSenders || []).map(t =>
+      `<div class="sender-row"><span>${escapeHtml(t.sender_name || t.sender_email)}</span><span class="badge">${t.c}</span></div>`
+    ).join('') || '<div class="empty-sm">데이터 없음</div>';
+
+    // 언어 분포
+    const langNames = { ko: '한국어', en: '영어', zh: '중국어', ja: '일본어', unknown: '기타' };
+    const dist = $('#lang-dist');
+    dist.innerHTML = (s.byLang || []).map(l =>
+      `<div class="sender-row"><span>${langNames[l.lang] || l.lang}</span><span class="badge">${l.c}</span></div>`
+    ).join('') || '<div class="empty-sm">데이터 없음</div>';
+
+    // 동기화 시각
+    if (r.lastSyncAt) {
+      const d = new Date(r.lastSyncAt);
+      $('#sync-info').textContent = `마지막 동기화: ${d.toLocaleString('ko-KR')}`;
+    }
+  } catch (_) {}
+}
+
+// ============================================================
+//  동기화
+// ============================================================
+async function runSync() {
+  if ((config.apiKeys || []).length >= 0) { /* 동기화는 키 불필요 */ }
+  const btn = $('#btn-sync');
+  btn.disabled = true;
+  showLoading('🔄 메일 동기화 시작...');
+  try {
+    const res = await window.api.syncRun();
+    hideLoading();
+    if (res.ok) {
+      $('#sync-info').textContent = `✅ ${res.fetched}건 동기화 (첨부 ${res.attachSaved || 0}개 저장)`;
+      loadStats();
+      alert(`동기화 완료!\n\n• 메일 ${res.fetched}건 저장/색인\n• 첨부 ${res.attachSaved || 0}개 로컬 저장${res.attachFail ? ' ('+res.attachFail+'개 실패)' : ''}`);
+    } else {
+      alert('동기화 실패: ' + res.error);
+      $('#sync-info').textContent = '⚠️ 동기화 실패';
+    }
+  } catch (err) {
+    hideLoading();
+    alert('동기화 오류: ' + String(err));
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function handleSyncProgress({ phase, cur, total, msg }) {
+  const t = total ? ` (${cur}/${total})` : '';
+  showLoading((msg || '동기화 중') + t);
+  $('#sync-info').textContent = (msg || '동기화 중') + t;
+}
+
+// ============================================================
+//  AI 브리핑
+// ============================================================
+async function generateBriefing() {
+  if ((config.apiKeys || []).filter(k => k && k.trim()).length === 0) {
+    alert('API 키가 필요합니다. ⚙️ 설정에서 입력하세요.');
+    switchView('settings');
+    return;
+  }
+  const box = $('#briefing-result');
+  box.innerHTML = '<div class="empty">🧠 AI가 메일을 분석하는 중입니다... (메일 수에 따라 시간이 걸릴 수 있습니다)</div>';
+  showLoading('🧠 AI 브리핑 생성 중...');
+  try {
+    const res = await window.api.aiBriefing(briefMode);
+    hideLoading();
+    if (res.ok) {
+      box.innerHTML = `<div class="briefing-meta">📅 ${res.period} · 분석 메일 ${res.count}건 · 키#${res.usedKeyIndex}</div>` +
+        `<div class="briefing-body">${formatAnswer(res.content)}</div>`;
+    } else {
+      box.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+    }
+  } catch (err) {
+    hideLoading();
+    box.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`;
+  }
+}
+
+// ============================================================
+//  주소록
+// ============================================================
+async function importContacts() {
+  showLoading('📥 Outlook 주소록 가져오는 중...');
+  try {
+    const res = await window.api.contactsImport();
+    hideLoading();
+    if (res.ok) {
+      alert(`주소록 ${res.imported}건을 가져왔습니다.`);
+      loadContacts('');
+      loadStats();
+    } else {
+      alert('주소록 가져오기 실패: ' + res.error);
+    }
+  } catch (err) {
+    hideLoading();
+    alert('오류: ' + String(err));
+  }
+}
+
+async function loadContacts(query) {
+  const list = $('#contact-list');
+  list.innerHTML = '<div class="empty">불러오는 중...</div>';
+  try {
+    const res = await window.api.contactsList(query || '', 500);
+    if (!res.ok) { list.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`; return; }
+    const contacts = res.contacts || [];
+    if (!contacts.length) { list.innerHTML = '<div class="empty">👥 주소록이 비어 있습니다.</div>'; return; }
+    list.innerHTML = '';
+    contacts.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'contact-item';
+      item.innerHTML = `
+        <div class="contact-avatar">${escapeHtml((c.name || c.email || '?').slice(0, 1).toUpperCase())}</div>
+        <div class="contact-info">
+          <div class="contact-name">${escapeHtml(c.name || '(이름 없음)')}</div>
+          <div class="contact-email">${escapeHtml(c.email)}${c.company ? ' · ' + escapeHtml(c.company) : ''}</div>
+        </div>
+        <button class="contact-search-btn" title="이 사람 메일 검색">📬</button>
+      `;
+      item.querySelector('.contact-search-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        switchView('mails');
+        $('#mail-search').value = c.email;
+        loadMails(c.email);
+      });
+      list.appendChild(item);
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`;
+  }
+}
 
 // ============================================================
 //  뷰 전환
 // ============================================================
 let mailsLoadedOnce = false;
+let contactsLoadedOnce = false;
 function switchView(view) {
   $$('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach(v => v.classList.remove('active'));
   $('#view-' + view).classList.add('active');
 
-  // 메일 목록 뷰 최초 진입 시 자동으로 최신 메일 로딩
+  if (view === 'dashboard') loadStats();
+  // 메일 목록 뷰 최초 진입 시 자동으로 DB 메일 로딩
   if (view === 'mails' && !mailsLoadedOnce) {
     mailsLoadedOnce = true;
     loadMails('');
+  }
+  if (view === 'contacts' && !contactsLoadedOnce) {
+    contactsLoadedOnce = true;
+    loadContacts('');
   }
 }
 
@@ -110,7 +300,8 @@ function applyConfigToUI() {
     inp.value = keys[idx] || '';
   });
   $('#model-select').value = config.model || 'llama-3.3-70b';
-  $('#max-mails').value = config.maxMails || 50;
+  $('#max-mails').value = config.maxMails || 2000;
+  if ($('#save-attach-toggle')) $('#save-attach-toggle').checked = config.saveAttachmentsOnSync !== false;
 
   // 소스
   const source = config.source || 'outlook';
@@ -152,7 +343,7 @@ async function saveSettings() {
   const newConfig = {
     apiKeys,
     model: $('#model-select').value,
-    maxMails: parseInt($('#max-mails').value, 10) || 50,
+    maxMails: parseInt($('#max-mails').value, 10) || 2000,
     source,
     pstPath: $('#pst-path').value.trim(),
     dateFilter: {
@@ -161,7 +352,8 @@ async function saveSettings() {
       end: $('#date-end').value || ''
     },
     realtime: $('#realtime-toggle').checked,
-    realtimeIntervalSec: parseInt($('#realtime-interval').value, 10) || 60
+    realtimeIntervalSec: parseInt($('#realtime-interval').value, 10) || 60,
+    saveAttachmentsOnSync: $('#save-attach-toggle') ? $('#save-attach-toggle').checked : true
   };
   config = await window.api.setConfig(newConfig);
   updateKeyStatus();
@@ -323,47 +515,34 @@ async function sendChat() {
       renderPendingFiles();
     }
 
-    // ---- (2) 메일 검색 의도 감지 ----
-    if (looksLikeMailSearch(text)) {
-      setTyping(typingEl, '📬 Outlook 메일 검색 중...');
-      const keyword = extractKeyword(text);
-      const mails = await window.api.searchMails(keyword, config.maxMails);
-      mailCache = mails;
-      if (mails.length > 0) {
-        const mailSummary = mails.slice(0, 20).map((m, i) =>
-          `${i + 1}. [${m.received}] 보낸사람:${m.sender} | 제목:${m.subject}${m.hasAttach ? ' (첨부'+m.attachCount+')' : ''}\n   미리보기: ${(m.preview||'').replace(/\s+/g,' ').slice(0,150)}`
-        ).join('\n');
-        contextParts.push(`[Outlook 검색 결과 - "${keyword}" 관련 ${mails.length}건]\n${mailSummary}`);
+    // ---- (2) 첨부가 있으면 첨부 분석 위주로 응답 ----
+    if (contextParts.length > 0) {
+      setTyping(typingEl, '🧠 AI가 답변 생성 중...');
+      const messages = [
+        { role: 'system', content: '당신은 한국어 이메일/첨부파일 분석 비서입니다. 제공된 첨부 내용을 근거로 정확히 요약/분석하세요. 외국어는 한국어로 번역해 설명하세요.' },
+        { role: 'user', content: `${contextParts.join('\n\n')}\n\n---\n사용자 질문: ${text || '위 첨부파일을 분석/요약해줘'}` }
+      ];
+      const res = await window.api.chat(messages);
+      removeTyping(typingEl);
+      if (res.ok) {
+        chatHistory.push({ role: 'user', content: text || '첨부 분석' });
+        chatHistory.push({ role: 'assistant', content: res.content });
+        addMessage('assistant', formatAnswer(res.content), { keyIndex: res.usedKeyIndex });
       } else {
-        contextParts.push(`[Outlook 검색 결과] "${keyword}" 관련 메일을 찾지 못했습니다.`);
+        addMessage('assistant', `❌ 오류: ${escapeHtml(res.error)}`);
       }
+      return;
     }
 
-    // ---- (3) Cerebras 호출 ----
-    setTyping(typingEl, '🧠 AI가 답변 생성 중...');
-    const systemPrompt = {
-      role: 'system',
-      content: `당신은 한국어로 답변하는 Outlook 이메일 비서입니다.
-- 사용자의 메일 검색, 첨부파일(PDF/엑셀/이미지/워드) 분석, 요약을 돕습니다.
-- 제공된 [Outlook 검색 결과]나 [첨부파일] 정보를 근거로 정확하게 답하세요.
-- 정보가 없으면 추측하지 말고 "해당 정보를 찾지 못했다"고 말하세요.
-- 답변은 간결하고 명확하게, 필요하면 목록으로 정리하세요.`
-    };
-
-    const userContent = contextParts.length
-      ? `${contextParts.join('\n\n')}\n\n---\n사용자 질문: ${text || '위 첨부파일을 분석/요약해줘'}`
-      : text;
-
-    // 대화 맥락 유지 (최근 6개 메시지만)
-    chatHistory.push({ role: 'user', content: userContent });
-    const messages = [systemPrompt, ...chatHistory.slice(-6)];
-
-    const res = await window.api.chat(messages);
-
+    // ---- (3) DB 색인 기반 대화형 질의 (aiChatMails) ----
+    setTyping(typingEl, '🔎 메일 DB 검색 + AI 분석 중...');
+    const res = await window.api.aiChatMails(text, chatHistory.slice(-6));
     removeTyping(typingEl);
     if (res.ok) {
+      chatHistory.push({ role: 'user', content: text });
       chatHistory.push({ role: 'assistant', content: res.content });
-      addMessage('assistant', formatAnswer(res.content), { keyIndex: res.usedKeyIndex });
+      const info = res.contextCount ? { keyIndex: res.usedKeyIndex, ctx: res.contextCount } : { keyIndex: res.usedKeyIndex };
+      addMessage('assistant', formatAnswer(res.content), info);
     } else {
       addMessage('assistant', `❌ 오류가 발생했습니다:\n${escapeHtml(res.error)}`);
     }
@@ -395,106 +574,157 @@ function extractKeyword(text) {
 // ============================================================
 //  메일 목록 뷰
 // ============================================================
+// DB 색인 기반 메일 로드 (동기화된 데이터)
 async function loadMails(query) {
   const list = $('#mail-list');
-  list.innerHTML = '<div class="empty">🔄 Outlook에서 불러오는 중... (Outlook이 실행 중이어야 합니다)</div>';
-  showLoading('📬 Outlook 메일 불러오는 중...');
+  list.innerHTML = '<div class="empty">🔄 불러오는 중...</div>';
   try {
-    const mails = await window.api.searchMails(query || '', config.maxMails);
-    mailCache = mails;
-    renderMailList(mails);
+    const hasAttach = $('#filter-attach') && $('#filter-attach').checked ? true : null;
+    let res;
+    if (query && query.trim()) {
+      res = await window.api.dbSearchMails({ query: query.trim(), limit: 300, hasAttach });
+      if (res.ok) mailCache = res.mails;
+    } else {
+      res = await window.api.dbSearchMails({ query: '', limit: 300, hasAttach });
+      if (res.ok) mailCache = res.mails;
+    }
+    if (!res.ok) { list.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`; return; }
+    renderMailList(mailCache);
   } catch (err) {
-    list.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}<br><br>
-      Outlook이 실행 중이고 로그인되어 있는지 확인하세요.</div>`;
-  } finally {
-    hideLoading();
+    list.innerHTML = `<div class="empty">❌ ${escapeHtml(String(err))}</div>`;
   }
 }
+
+// DB row 또는 실시간 mail 객체 모두 렌더 (필드 호환)
+function mv(m, dbField, liveField) { return m[dbField] !== undefined ? m[dbField] : m[liveField]; }
 
 function renderMailList(mails) {
   const list = $('#mail-list');
   if (!mails || mails.length === 0) {
-    list.innerHTML = '<div class="empty">📭 메일이 없습니다.</div>';
+    list.innerHTML = '<div class="empty">📭 저장된 메일이 없습니다. 🔄 <b>메일 동기화</b>를 먼저 실행하세요.</div>';
     return;
   }
   list.innerHTML = '';
   mails.forEach(m => {
+    const subject = mv(m, 'subject', 'subject');
+    const sender = m.sender_name !== undefined ? m.sender_name : m.sender;
+    const received = m.received_at !== undefined ? m.received_at : m.received;
+    const hasAttach = m.has_attach !== undefined ? m.has_attach : m.hasAttach;
+    const attachCount = m.attach_count !== undefined ? m.attach_count : m.attachCount;
+    const unread = m.unread;
+    const preview = m.preview || '';
+    const lang = m.lang || '';
+    const langTag = lang === 'en' ? '🇬🇧 EN' : (lang === 'zh' ? '🇨🇳 ZH' : (lang === 'ja' ? '🇯🇵 JA' : ''));
+
     const item = document.createElement('div');
     item.className = 'mail-item';
     item.innerHTML = `
-      <div class="subject">${m.unread ? '<span class="unread-dot">●</span> ' : ''}${escapeHtml(m.subject || '(제목 없음)')}</div>
+      <div class="subject">${unread ? '<span class="unread-dot">●</span> ' : ''}${escapeHtml(subject || '(제목 없음)')}</div>
       <div class="meta">
-        <span>👤 ${escapeHtml(m.sender || '')}</span>
-        <span>🕐 ${escapeHtml(m.received || '')}</span>
-        ${m.hasAttach ? `<span class="attach-tag">📎 첨부 ${m.attachCount}</span>` : ''}
+        <span>👤 ${escapeHtml(sender || '')}</span>
+        <span>🕐 ${escapeHtml(received || '')}</span>
+        ${langTag ? `<span class="lang-tag">${langTag}</span>` : ''}
+        ${hasAttach ? `<span class="attach-tag">📎 ${attachCount || ''}</span>` : ''}
       </div>
-      <div class="preview">${escapeHtml((m.preview || '').replace(/\s+/g, ' '))}</div>
+      <div class="preview">${escapeHtml((preview || '').replace(/\s+/g, ' '))}</div>
     `;
-    item.addEventListener('click', () => openMail(m.entryId));
+    item.addEventListener('click', () => openMailDetail(m));
     list.appendChild(item);
   });
 }
 
-// 메일 클릭 → 상세 열기 + AI 요약 옵션
-async function openMail(entryId) {
-  showLoading('📧 메일 상세 불러오는 중...');
+// 메일 상세 모달 (DB id 기반)
+async function openMailDetail(m) {
+  // 실시간 수신 메일(entryId만 있고 DB id 없음)은 DB에서 조회 시도
+  let id = m.id;
+  if (!id && m.entryId) {
+    // DB에서 못 찾으면 미리보기만
+  }
+  if (!id) {
+    alert('이 메일은 아직 DB에 색인되지 않았습니다. 🔄 동기화 후 확인하세요.');
+    return;
+  }
+  showLoading('📧 메일 불러오는 중...');
   try {
-    const mail = await window.api.getMail(entryId);
+    const res = await window.api.dbGetMail(id);
     hideLoading();
-    // 채팅 뷰로 이동해서 메일 내용 표시
-    switchView('chat');
-    let msg = `<b>📧 ${escapeHtml(mail.subject || '(제목 없음)')}</b>\n`;
-    msg += `보낸사람: ${escapeHtml(mail.sender || '')} &lt;${escapeHtml(mail.senderMail || '')}&gt;\n`;
-    msg += `받는사람: ${escapeHtml(mail.to || '')}\n`;
-    msg += `시간: ${escapeHtml(mail.received || '')}\n`;
-    if (mail.attachments && mail.attachments.length) {
-      msg += `첨부: ${mail.attachments.map(a => escapeHtml(a.name)).join(', ')}\n`;
-    }
-    msg += `\n${escapeHtml((mail.body || '').slice(0, 1500))}`;
-    addMessage('assistant', msg);
-
-    // 이 메일을 대화 맥락에 넣기
-    chatHistory.push({
-      role: 'user',
-      content: `[선택한 메일]\n제목:${mail.subject}\n보낸사람:${mail.sender}\n본문:${(mail.body||'').slice(0,5000)}`
-    });
-
-    // 첨부가 있으면 분석 제안
-    if (mail.attachments && mail.attachments.length) {
-      const analyze = confirm(`이 메일에 첨부파일 ${mail.attachments.length}개가 있습니다.\nAI로 분석할까요?`);
-      if (analyze) analyzeMailAttachments(entryId);
-    }
+    if (!res.ok) { alert(res.error); return; }
+    renderMailModal(res.mail, res.attachments, res.analyses);
   } catch (err) {
     hideLoading();
-    addMessage('assistant', `❌ 메일 열기 실패: ${escapeHtml(String(err))}`);
-    switchView('chat');
+    alert('오류: ' + String(err));
   }
 }
 
-// 메일 첨부파일 저장 후 분석
-async function analyzeMailAttachments(entryId) {
-  const typingEl = addTyping();
-  setTyping(typingEl, '📎 첨부파일 저장/분석 중...');
-  try {
-    const paths = await window.api.saveAttachments(entryId);
-    if (!paths.length) { removeTyping(typingEl); addMessage('assistant', '분석 가능한 첨부파일이 없습니다.'); return; }
-    const results = await window.api.analyzeAttachments(paths);
-    const contextParts = results.map(r => r.ok
-      ? `[첨부: ${r.file} (${r.type}, ${r.sizeKB}KB)]\n${r.text}`
-      : `[첨부: ${r.file}] 실패: ${r.error}`);
+function renderMailModal(mail, atts, analyses) {
+  const body = $('#modal-body');
+  const langNames = { ko: '한국어', en: '영어', zh: '중국어', ja: '일본어', unknown: '기타' };
+  let html = `
+    <h2 class="modal-subject">${escapeHtml(mail.subject || '(제목 없음)')}</h2>
+    <div class="modal-meta">
+      <div>👤 <b>${escapeHtml(mail.sender_name || '')}</b> &lt;${escapeHtml(mail.sender_email || '')}&gt;</div>
+      <div>📥 받는사람: ${escapeHtml(mail.recipients || '')}</div>
+      ${mail.cc ? `<div>📋 참조: ${escapeHtml(mail.cc)}</div>` : ''}
+      <div>🕐 ${escapeHtml(mail.received_at || '')} · 🌐 ${langNames[mail.lang] || mail.lang} · 📁 ${escapeHtml(mail.folder || '')}</div>
+    </div>`;
 
-    setTyping(typingEl, '🧠 AI 분석 중...');
-    const messages = [
-      { role: 'system', content: '당신은 한국어 이메일 첨부파일 분석 비서입니다. 첨부 내용을 명확히 요약/분석하세요.' },
-      { role: 'user', content: `${contextParts.join('\n\n')}\n\n---\n위 첨부파일들을 각각 요약하고 핵심을 정리해줘.` }
-    ];
-    const res = await window.api.chat(messages);
-    removeTyping(typingEl);
-    if (res.ok) addMessage('assistant', formatAnswer(res.content), { keyIndex: res.usedKeyIndex });
-    else addMessage('assistant', `❌ ${escapeHtml(res.error)}`);
-  } catch (err) {
-    removeTyping(typingEl);
-    addMessage('assistant', `❌ 첨부 분석 실패: ${escapeHtml(String(err))}`);
+  if (atts && atts.length) {
+    html += `<div class="modal-atts"><b>📎 첨부파일 (${atts.length})</b><ul>` +
+      atts.map(a => `<li>${escapeHtml(a.file_name)} (${a.size_kb}KB) ${a.saved_path ? `<button class="link-btn" data-open="${escapeHtml(a.saved_path)}">열기</button> <button class="link-btn" data-folder="${escapeHtml(a.saved_path)}">폴더</button>` : ''}</li>`).join('') +
+      `</ul></div>`;
+  }
+
+  html += `<div class="modal-actions">
+    <button class="btn-primary" id="modal-translate">🌐 번역/분석</button>
+    <button class="btn-primary" id="modal-reply">✍️ 답장 초안</button>
+    <button id="modal-ask">💬 이 메일로 질문</button>
+  </div>`;
+
+  html += `<div class="modal-body-text">${escapeHtml((mail.body || '').slice(0, 8000))}</div>`;
+  html += `<div id="modal-ai-result" class="modal-ai-result"></div>`;
+
+  body.innerHTML = html;
+  $('#mail-modal').classList.remove('hidden');
+
+  // 첨부 열기/폴더
+  body.querySelectorAll('[data-open]').forEach(b => b.addEventListener('click', () => window.api.openPath(b.dataset.open)));
+  body.querySelectorAll('[data-folder]').forEach(b => b.addEventListener('click', () => window.api.showItem(b.dataset.folder)));
+
+  // 번역/분석
+  $('#modal-translate').addEventListener('click', async () => {
+    const box = $('#modal-ai-result');
+    box.innerHTML = '<div class="empty">🌐 번역/분석 중...</div>';
+    const res = await window.api.aiTranslate(mail.id);
+    box.innerHTML = res.ok ? `<div class="briefing-body">${formatAnswer(res.content)}</div>` : `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+  });
+  // 답장 초안
+  $('#modal-reply').addEventListener('click', async () => {
+    const instruction = prompt('답장에 반영할 지시사항이 있으면 입력하세요 (없으면 비워두기):', '') || '';
+    const box = $('#modal-ai-result');
+    box.innerHTML = '<div class="empty">✍️ 답장 초안 작성 중...</div>';
+    const res = await window.api.aiDraftReply(mail.id, instruction, 'formal', 'auto');
+    if (res.ok) {
+      box.innerHTML = `<div class="reply-draft"><div class="reply-head">✍️ 답장 초안 <button class="link-btn" id="copy-reply">📋 복사</button></div><pre>${escapeHtml(res.content)}</pre></div>`;
+      $('#copy-reply').addEventListener('click', () => { navigator.clipboard.writeText(res.content); $('#copy-reply').textContent = '✅ 복사됨'; });
+    } else {
+      box.innerHTML = `<div class="empty">❌ ${escapeHtml(res.error)}</div>`;
+    }
+  });
+  // 이 메일로 질문
+  $('#modal-ask').addEventListener('click', () => {
+    $('#mail-modal').classList.add('hidden');
+    switchView('chat');
+    chatHistory.push({ role: 'user', content: `[참고 메일]\n제목:${mail.subject}\n발신:${mail.sender_name}\n본문:${(mail.body||'').slice(0,4000)}` });
+    addMessage('assistant', `📧 "<b>${escapeHtml(mail.subject)}</b>" 메일을 맥락에 추가했습니다. 이 메일에 대해 질문해보세요.`);
+  });
+
+  // 이전 분석 결과 표시
+  if (analyses && analyses.length) {
+    const box = $('#modal-ai-result');
+    const kindName = { translate: '🌐 번역/분석', reply: '✍️ 답장초안', summary: '요약' };
+    box.innerHTML = `<div class="prev-analyses"><b>📚 이전 분석 기록</b>` +
+      analyses.slice(0, 3).map(a => `<details><summary>${kindName[a.kind] || a.kind} (${a.created_at})</summary><div class="briefing-body">${formatAnswer(a.content)}</div></details>`).join('') +
+      `</div>`;
   }
 }
 
@@ -506,7 +736,7 @@ function addMessage(role, html, opts = {}) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
   let extra = '';
-  if (opts.keyIndex) extra = `<div style="font-size:10px;opacity:.5;margin-top:6px;">키#${opts.keyIndex} 사용</div>`;
+  if (opts.keyIndex) extra = `<div style="font-size:10px;opacity:.5;margin-top:6px;">키#${opts.keyIndex} 사용${opts.ctx ? ` · 참고메일 ${opts.ctx}건` : ''}</div>`;
   div.innerHTML = `<div class="bubble">${html}${extra}</div>`;
   log.appendChild(div);
   log.scrollTop = log.scrollHeight;

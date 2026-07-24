@@ -20,21 +20,36 @@ async function extract(filePath) {
 
   // -------- PDF --------
   if (ext === '.pdf') {
-    const pdfParse = require('pdf-parse');
     const buffer = fs.readFileSync(filePath);
-    const data = await pdfParse(buffer);
-    return {
-      type: 'pdf',
-      sizeKB,
-      pages: data.numpages,
-      text: truncate(data.text, 20000)
-    };
+    // 1차: pdf-parse (빠름). 실패 시 2차: pdfjs-dist (견고, Mozilla 공식)
+    try {
+      const pdfParse = require('pdf-parse');
+      const data = await pdfParse(buffer);
+      if (data && data.text && data.text.trim().length > 0) {
+        return { type: 'pdf', sizeKB, pages: data.numpages, text: truncate(data.text, 20000) };
+      }
+      // 텍스트가 비면 폴백
+      throw new Error('empty text');
+    } catch (e1) {
+      // 2차: pdfjs-dist
+      const result = await extractPdfWithPdfjs(buffer);
+      return { type: 'pdf', sizeKB, pages: result.pages, text: truncate(result.text, 20000) };
+    }
   }
 
   // -------- 엑셀 / CSV --------
   if (ext === '.xlsx' || ext === '.xls' || ext === '.csv') {
     const XLSX = require('xlsx');
-    const wb = XLSX.readFile(filePath);
+    let wb;
+    if (ext === '.csv') {
+      // CSV는 UTF-8 텍스트로 직접 읽어 인코딩 깨짐 방지 (BOM 제거)
+      let raw = fs.readFileSync(filePath, 'utf8');
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1);
+      wb = XLSX.read(raw, { type: 'string', codepage: 65001 });
+    } else {
+      // 엑셀 바이너리
+      wb = XLSX.read(fs.readFileSync(filePath), { type: 'buffer', codepage: 65001 });
+    }
     let out = '';
     const sheetsInfo = [];
     for (const sheetName of wb.SheetNames) {
@@ -93,6 +108,28 @@ async function extract(filePath) {
     sizeKB,
     text: `[지원하지 않는 형식: ${name}] 텍스트 추출을 건너뜁니다.`
   };
+}
+
+// pdfjs-dist 로 PDF 텍스트 추출 (pdf-parse 실패 시 폴백)
+// pdfjs-dist v4 는 ESM(.mjs) 이므로 동적 import 사용
+async function extractPdfWithPdfjs(buffer) {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  const uint8 = new Uint8Array(buffer);
+  const loadingTask = pdfjs.getDocument({
+    data: uint8,
+    useSystemFonts: true,
+    disableFontFace: true,
+    isEvalSupported: false
+  });
+  const pdf = await loadingTask.promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const strings = content.items.map(it => (it.str || ''));
+    text += strings.join(' ') + '\n';
+  }
+  return { text, pages: pdf.numPages };
 }
 
 function truncate(str, max) {

@@ -19,12 +19,16 @@
       </div>
 
       <nav class="nav">
-        <button class="nav-btn active" data-view="chat">💬 대화형 검색</button>
+        <button class="nav-btn active" data-view="dashboard">📊 대시보드</button>
+        <button class="nav-btn" data-view="chat">💬 대화형 검색</button>
         <button class="nav-btn" data-view="mails">📬 메일 목록</button>
+        <button class="nav-btn" data-view="contacts">👥 주소록</button>
         <button class="nav-btn" data-view="settings">⚙️ 설정</button>
       </nav>
 
       <div class="sidebar-footer">
+        <button id="btn-sync" class="btn-sync">🔄 메일 동기화</button>
+        <div id="sync-info" class="sync-info">동기화 필요</div>
         <div id="update-badge" class="update-badge hidden"></div>
         <div id="key-status" class="key-status">API 키: 확인 중...</div>
       </div>
@@ -33,8 +37,46 @@
     <!-- 메인 영역 -->
     <main id="main">
 
+      <!-- ========== 대시보드 뷰 ========== -->
+      <section id="view-dashboard" class="view active">
+        <header class="view-header">
+          <h1>📊 대시보드 & AI 브리핑</h1>
+          <p class="hint">전체 메일을 AI가 분석해 내 스케줄·한 일·놓친 일·발신자별 요약을 알려줍니다.</p>
+        </header>
+
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-num" id="stat-total">0</div><div class="stat-label">전체 메일</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-unread">0</div><div class="stat-label">읽지 않음</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-attach">0</div><div class="stat-label">첨부 있음</div></div>
+          <div class="stat-card"><div class="stat-num" id="stat-contacts">0</div><div class="stat-label">주소록</div></div>
+        </div>
+
+        <div class="briefing-bar">
+          <span>AI 브리핑 기간:</span>
+          <button class="brief-btn" data-mode="today">오늘</button>
+          <button class="brief-btn active" data-mode="week">최근 7일</button>
+          <button class="brief-btn" data-mode="month">최근 30일</button>
+          <button id="btn-briefing" class="btn-primary">🧠 브리핑 생성</button>
+        </div>
+
+        <div id="briefing-result" class="briefing-result">
+          <div class="empty">먼저 좌측 하단 <b>🔄 메일 동기화</b>로 메일을 가져온 뒤, <b>브리핑 생성</b>을 눌러주세요.</div>
+        </div>
+
+        <div class="dash-cols">
+          <div class="dash-box">
+            <h3>👤 주요 발신자</h3>
+            <div id="top-senders" class="top-senders"></div>
+          </div>
+          <div class="dash-box">
+            <h3>🌐 언어별 분포</h3>
+            <div id="lang-dist" class="lang-dist"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- ========== 대화형 검색 뷰 ========== -->
-      <section id="view-chat" class="view active">
+      <section id="view-chat" class="view">
         <header class="view-header">
           <h1>💬 대화형 메일 검색 & AI 분석</h1>
           <p class="hint">예) "지난주 김부장님이 보낸 견적서 찾아줘", "이 PDF 요약해줘"</p>
@@ -67,16 +109,40 @@
         <header class="view-header">
           <h1>📬 메일 목록 <span id="realtime-dot" class="realtime-dot hidden" title="실시간 감시 중">🟢 실시간</span></h1>
           <div class="search-row">
-            <input id="mail-search" type="text" placeholder="제목/보낸사람/내용 검색 (비우면 최신 메일)" />
+            <input id="mail-search" type="text" placeholder="색인 검색 (제목/보낸사람/내용, 한·영·중 지원)" />
             <button id="btn-mail-search" class="btn-primary">검색</button>
-            <button id="btn-mail-refresh">🔄 새로고침</button>
+            <button id="btn-mail-refresh">🔄 목록</button>
             <button id="btn-check-new">📨 새 메일</button>
+            <label class="inline-check" style="margin-left:auto"><input type="checkbox" id="filter-attach" /> 첨부만</label>
           </div>
         </header>
         <div id="mail-list" class="mail-list">
-          <div class="empty">🔄 새로고침을 눌러 Outlook 받은편지함을 불러오세요.</div>
+          <div class="empty">🔄 <b>메일 동기화</b> 후 <b>목록</b>을 눌러 저장된 메일을 확인하세요.</div>
         </div>
       </section>
+
+      <!-- ========== 주소록 뷰 ========== -->
+      <section id="view-contacts" class="view">
+        <header class="view-header">
+          <h1>👥 주소록</h1>
+          <div class="search-row">
+            <input id="contact-search" type="text" placeholder="이름/이메일/회사 검색" />
+            <button id="btn-contact-search" class="btn-primary">검색</button>
+            <button id="btn-contact-import">📥 Outlook에서 가져오기</button>
+          </div>
+        </header>
+        <div id="contact-list" class="contact-list">
+          <div class="empty">📥 <b>Outlook에서 가져오기</b>를 누르거나, 메일 동기화 시 발신자가 자동 축적됩니다.</div>
+        </div>
+      </section>
+
+      <!-- ========== 메일 상세 모달 ========== -->
+      <div id="mail-modal" class="modal hidden">
+        <div class="modal-box">
+          <button id="modal-close" class="modal-close">✕</button>
+          <div id="modal-body"></div>
+        </div>
+      </div>
 
       <!-- ========== 설정 뷰 ========== -->
       <section id="view-settings" class="view">
@@ -142,8 +208,11 @@
             <option value="qwen-3-32b">qwen-3-32b</option>
           </select>
 
-          <h2 style="margin-top:18px;">📥 검색 시 불러올 최대 메일 수</h2>
-          <input id="max-mails" type="number" min="10" max="500" value="50" />
+          <h2 style="margin-top:18px;">📥 동기화 시 불러올 최대 메일 수</h2>
+          <input id="max-mails" type="number" min="10" max="20000" value="2000" />
+
+          <h2 style="margin-top:18px;">📎 동기화 시 첨부(도면 등) 자동 저장</h2>
+          <label class="inline-check"><input type="checkbox" id="save-attach-toggle" checked /> 첨부파일을 로컬에 자동 저장하고 텍스트 추출</label>
         </div>
 
         <div class="settings-actions">
