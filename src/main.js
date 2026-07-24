@@ -58,7 +58,24 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: false
     }
   });
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // 한글 깨짐 방지: 로컬 파일 응답에 UTF-8 charset 강제
+  try {
+    const ses = mainWindow.webContents.session;
+    ses.webRequest.onHeadersReceived((details, cb) => {
+      const h = details.responseHeaders || {};
+      const ctKey = Object.keys(h).find(k => k.toLowerCase() === 'content-type');
+      if (ctKey) {
+        const v = String(h[ctKey][0] || '');
+        if (/text\/html/i.test(v) && !/charset/i.test(v)) h[ctKey] = ['text/html; charset=utf-8'];
+        else if (/javascript/i.test(v) && !/charset/i.test(v)) h[ctKey] = ['text/javascript; charset=utf-8'];
+        else if (/text\/css/i.test(v) && !/charset/i.test(v)) h[ctKey] = ['text/css; charset=utf-8'];
+      }
+      cb({ responseHeaders: h });
+    });
+  } catch (e) { console.error('charset 헤더 설정 실패:', e); }
+
+  // charset을 명시하여 로드 (일부 환경에서 meta 인식 실패 대비)
+  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'), { });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url); return { action: 'deny' };
   });

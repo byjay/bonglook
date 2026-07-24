@@ -26,7 +26,7 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;}
 body{
-  font-family:'Segoe UI','Malgun Gothic',-apple-system,BlinkMacSystemFont,Roboto,'Apple SD Gothic Neo',sans-serif;
+  font-family:'Segoe UI','Malgun Gothic','맑은 고딕','Apple SD Gothic Neo','Noto Sans KR','Microsoft YaHei',-apple-system,BlinkMacSystemFont,Roboto,sans-serif;
   background:var(--read-bg); color:var(--text);
   font-size:13px; overflow:hidden;
 }
