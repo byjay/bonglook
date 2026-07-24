@@ -388,7 +388,12 @@ function stats() {
     FROM mails WHERE sender_email != ''
     GROUP BY sender_email ORDER BY c DESC LIMIT 10
   `).all();
-  return { total, unread, withAttach, contacts, attachments: attach, byLang, topSenders, ftsEnabled };
+  // 폴더별 카운트
+  const byFolder = {};
+  db.prepare('SELECT folder, COUNT(*) c FROM mails GROUP BY folder').all().forEach(r => {
+    byFolder[r.folder || 'Inbox'] = r.c;
+  });
+  return { total, unread, withAttach, contacts, attachments: attach, byLang, topSenders, byFolder, ftsEnabled };
 }
 
 // ------------------------------------------------------------
