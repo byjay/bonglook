@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
+  <title>Outlook AI 어시스턴트</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- 사이드바 -->
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="logo">📧</span>
+        <div>
+          <div class="brand-title">Outlook AI</div>
+          <div class="brand-sub">어시스턴트 <span id="app-version"></span></div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-btn active" data-view="chat">💬 대화형 검색</button>
+        <button class="nav-btn" data-view="mails">📬 메일 목록</button>
+        <button class="nav-btn" data-view="settings">⚙️ 설정</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="update-badge" class="update-badge hidden"></div>
+        <div id="key-status" class="key-status">API 키: 확인 중...</div>
+      </div>
+    </aside>
+
+    <!-- 메인 영역 -->
+    <main id="main">
+
+      <!-- ========== 대화형 검색 뷰 ========== -->
+      <section id="view-chat" class="view active">
+        <header class="view-header">
+          <h1>💬 대화형 메일 검색 & AI 분석</h1>
+          <p class="hint">예) "지난주 김부장님이 보낸 견적서 찾아줘", "이 PDF 요약해줘"</p>
+        </header>
+
+        <div id="chat-log" class="chat-log">
+          <div class="msg assistant">
+            <div class="bubble">
+              안녕하세요! 👋 Outlook 메일을 대화로 검색하고, 첨부파일(PDF·엑셀·이미지·워드)을 분석해 드립니다.<br><br>
+              <b>이렇게 물어보세요:</b><br>
+              • "결제 관련 메일 찾아줘"<br>
+              • "홍길동이 보낸 메일 요약해줘"<br>
+              • 아래 📎 버튼으로 파일을 직접 올려 분석도 가능합니다 (최대 5개)
+            </div>
+          </div>
+        </div>
+
+        <!-- 첨부 대기 목록 -->
+        <div id="pending-files" class="pending-files"></div>
+
+        <div class="chat-input-bar">
+          <button id="btn-attach" title="파일 첨부 (최대 5개)">📎</button>
+          <textarea id="chat-input" rows="1" placeholder="메일을 검색하거나 질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
+          <button id="btn-send" class="btn-primary">전송</button>
+        </div>
+      </section>
+
+      <!-- ========== 메일 목록 뷰 ========== -->
+      <section id="view-mails" class="view">
+        <header class="view-header">
+          <h1>📬 메일 목록 <span id="realtime-dot" class="realtime-dot hidden" title="실시간 감시 중">🟢 실시간</span></h1>
+          <div class="search-row">
+            <input id="mail-search" type="text" placeholder="제목/보낸사람/내용 검색 (비우면 최신 메일)" />
+            <button id="btn-mail-search" class="btn-primary">검색</button>
+            <button id="btn-mail-refresh">🔄 새로고침</button>
+            <button id="btn-check-new">📨 새 메일</button>
+          </div>
+        </header>
+        <div id="mail-list" class="mail-list">
+          <div class="empty">🔄 새로고침을 눌러 Outlook 받은편지함을 불러오세요.</div>
+        </div>
+      </section>
+
+      <!-- ========== 설정 뷰 ========== -->
+      <section id="view-settings" class="view">
+        <header class="view-header">
+          <h1>⚙️ 설정</h1>
+          <p class="hint">Cerebras API 키를 최대 5개까지 입력하세요. 앞 키가 실패하면 자동으로 다음 키를 사용합니다.</p>
+        </header>
+
+        <div class="settings-card">
+          <h2>🔑 Cerebras API 키 (최대 5개)</h2>
+          <div class="key-inputs">
+            <label>키 1 <input type="password" class="api-key" data-idx="0" placeholder="csk-..." /></label>
+            <label>키 2 <input type="password" class="api-key" data-idx="1" placeholder="csk-... (선택)" /></label>
+            <label>키 3 <input type="password" class="api-key" data-idx="2" placeholder="csk-... (선택)" /></label>
+            <label>키 4 <input type="password" class="api-key" data-idx="3" placeholder="csk-... (선택)" /></label>
+            <label>키 5 <input type="password" class="api-key" data-idx="4" placeholder="csk-... (선택)" /></label>
+          </div>
+          <label class="show-keys"><input type="checkbox" id="toggle-keys" /> 키 표시</label>
+        </div>
+
+        <div class="settings-card">
+          <h2>📂 메일 데이터 소스</h2>
+          <div class="radio-group">
+            <label><input type="radio" name="source" value="outlook" checked />
+              <b>Outlook 연동 (실시간)</b> — PC의 Outlook이 열고 있는 데이터를 실시간으로 읽습니다. 새 메일 자동 수신 ✅</label>
+            <label><input type="radio" name="source" value="pst" />
+              <b>PST 파일 직접</b> — Outlook을 켜지 않아도 .pst 파일을 직접 읽습니다. (실시간 아님)</label>
+          </div>
+          <div id="pst-row" class="pst-row hidden">
+            <input id="pst-path" type="text" placeholder="PST 파일 경로 (예: C:\\Users\\...\\Outlook.pst)" readonly />
+            <button id="btn-pick-pst">📁 찾기</button>
+          </div>
+          <div id="conn-status" class="conn-status"></div>
+        </div>
+
+        <div class="settings-card">
+          <h2>📅 읽어올 기간</h2>
+          <p class="hint" style="margin-bottom:12px;">PST 용량이 크면 기본(최근 6개월)을 권장합니다.</p>
+          <div class="radio-group">
+            <label><input type="radio" name="dateMode" value="6months" checked /> <b>최근 6개월</b> (기본·권장)</label>
+            <label><input type="radio" name="dateMode" value="all" /> <b>전체</b> (느릴 수 있음)</label>
+            <label><input type="radio" name="dateMode" value="range" /> <b>기간 지정</b></label>
+          </div>
+          <div id="range-row" class="range-row hidden">
+            <label>시작 <input id="date-start" type="date" /></label>
+            <label>종료 <input id="date-end" type="date" /></label>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h2>🔔 실시간 새 메일</h2>
+          <label class="inline-check"><input type="checkbox" id="realtime-toggle" checked /> 새 메일 자동 확인 (Outlook 모드)</label>
+          <label class="inline-num">확인 주기(초)
+            <input id="realtime-interval" type="number" min="15" max="600" value="60" />
+          </label>
+        </div>
+
+        <div class="settings-card">
+          <h2>🧠 AI 모델</h2>
+          <select id="model-select">
+            <option value="llama-3.3-70b">llama-3.3-70b (권장·가장 안정적)</option>
+            <option value="llama3.1-8b">llama3.1-8b (빠름)</option>
+            <option value="qwen-3-32b">qwen-3-32b</option>
+          </select>
+
+          <h2 style="margin-top:18px;">📥 검색 시 불러올 최대 메일 수</h2>
+          <input id="max-mails" type="number" min="10" max="500" value="50" />
+        </div>
+
+        <div class="settings-actions">
+          <button id="btn-save-settings" class="btn-primary">💾 저장</button>
+          <button id="btn-check-update">⬇️ 업데이트 확인</button>
+          <span id="settings-saved" class="saved-msg hidden">✅ 저장되었습니다</span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 로딩 오버레이 -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <div id="loading-text">처리 중...</div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
