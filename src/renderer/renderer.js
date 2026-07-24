@@ -253,8 +253,8 @@ function handleSyncProgress({ phase, cur, total, msg }) {
 async function generateBriefing() {
   if (needKey()) return;
   const box = $('#briefing-result');
-  box.innerHTML = '<div class="empty">🧠 AI가 메일을 분석하는 중입니다...</div>';
-  showLoading('🧠 AI 브리핑 생성 중...');
+  box.innerHTML = '<div class="empty">메일을 분석하는 중입니다...</div>';
+  showLoading('요약 생성 중...');
   try {
     const res = await window.api.aiBriefing(briefMode);
     hideLoading();
@@ -488,7 +488,7 @@ async function sendChat() {
     }
 
     if (contextParts.length > 0) {
-      setTyping(typingEl, '🧠 AI가 답변 생성 중...');
+      setTyping(typingEl, '답변 생성 중...');
       const messages = [
         { role: 'system', content: '당신은 한국어 이메일/첨부파일 분석 비서입니다. 제공된 첨부 내용을 근거로 정확히 요약/분석하세요. 외국어는 한국어로 번역해 설명하세요.' },
         { role: 'user', content: `${contextParts.join('\n\n')}\n\n---\n사용자 질문: ${text || '위 첨부파일을 분석/요약해줘'}` }
@@ -503,7 +503,7 @@ async function sendChat() {
       return;
     }
 
-    setTyping(typingEl, '🔎 메일 DB 검색 + AI 분석 중...');
+    setTyping(typingEl, '메일 검색 중...');
     const res = await window.api.aiChatMails(text, chatHistory.slice(-6));
     removeTyping(typingEl);
     if (res.ok) {

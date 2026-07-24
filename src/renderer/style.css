@@ -1,25 +1,26 @@
 /* ============================================================
-   Outlook AI 어시스턴트 - Outlook 데스크톱 스타일 (다크)
+   Outlook AI 어시스턴트 - Microsoft Outlook 데스크톱 스타일 (라이트)
    3단 레이아웃: 아이콘 레일 / 폴더 트리 / (메일 리스트 + 읽기창)
+   실제 Outlook 라이트 테마 색상에 맞춤
    ============================================================ */
 
 :root{
-  --tb-bg:#0f171a;          /* 타이틀바 */
-  --ribbon-bg:#12201f;      /* 리본 */
-  --rail-bg:#0e1719;        /* 아이콘 레일 */
-  --fld-bg:#111c1e;         /* 폴더 트리 */
-  --list-bg:#152225;        /* 메일 리스트 */
-  --read-bg:#0f1a1d;        /* 읽기창 */
-  --card-bg:#16262a;        /* 카드/설정 */
-  --sel-bg:#123a33;         /* 선택 강조 배경 */
-  --hover-bg:#182b2e;
-  --accent:#0a84ff;         /* Outlook 파랑 */
-  --accent-2:#11b37a;       /* 폴더 활성 캡슐 그린 */
-  --text:#f3f5f5;
-  --muted:#9aa6a9;
-  --muted2:#6f7d80;
-  --border:#22343a;
-  --pill-blue:#0a84ff;
+  --tb-bg:#f3f3f3;          /* 타이틀바 (연회색) */
+  --ribbon-bg:#ffffff;      /* 리본 (흰색) */
+  --rail-bg:#faf9f8;        /* 아이콘 레일 */
+  --fld-bg:#f3f3f3;         /* 폴더 트리 (연회색) */
+  --list-bg:#ffffff;        /* 메일 리스트 (흰색) */
+  --read-bg:#ffffff;        /* 읽기창 (흰색) */
+  --card-bg:#ffffff;        /* 카드/설정 */
+  --sel-bg:#deecf9;         /* 선택 강조 배경 (연한 파랑) */
+  --hover-bg:#f3f2f1;       /* 호버 */
+  --accent:#0078d4;         /* Outlook 파랑 */
+  --accent-2:#0078d4;       /* 강조 파랑 */
+  --text:#201f1e;           /* 본문 텍스트 (거의 검정) */
+  --muted:#605e5c;          /* 보조 텍스트 (회색) */
+  --muted2:#8a8886;
+  --border:#e1dfdd;         /* 경계선 (연회색) */
+  --pill-blue:#0078d4;
 }
 
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -45,14 +46,14 @@ input,textarea,select{font-family:inherit;}
 .tb-ver{font-size:11px; color:var(--muted); font-weight:400;}
 .tb-search{
   flex:1; max-width:620px; margin:0 auto; display:flex; align-items:center;
-  background:#1d2f34; border:1px solid var(--border); border-radius:6px; padding:5px 10px; gap:8px;
+  background:#ffffff; border:1px solid var(--border); border-radius:6px; padding:5px 10px; gap:8px;
 }
 .tb-search-ic{opacity:.6;}
 .tb-search input{flex:1; background:transparent; border:none; outline:none; color:var(--text); font-size:13px;}
 .tb-right{min-width:120px; display:flex; justify-content:flex-end;}
-.conn-pill{font-size:11px; color:var(--muted); padding:3px 10px; border-radius:11px; background:#1d2f34; border:1px solid var(--border);}
-.conn-pill.ok{color:#7fe6b6; border-color:#1c5e46;}
-.conn-pill.bad{color:#ff9a9a; border-color:#6e2b2b;}
+.conn-pill{font-size:11px; color:var(--muted); padding:3px 10px; border-radius:11px; background:#ffffff; border:1px solid var(--border);}
+.conn-pill.ok{color:#107c10; border-color:#a7d8a7;}
+.conn-pill.bad{color:#a80000; border-color:#f0b0b0;}
 
 /* ---------------- 리본(명령바) ---------------- */
 #ribbon{
@@ -72,7 +73,7 @@ input,textarea,select{font-family:inherit;}
 .rb-btn:disabled{opacity:.4; cursor:default;}
 .rb-btn:disabled:hover{background:transparent;}
 .rb-primary{background:var(--accent); }
-.rb-primary:hover{background:#2b95ff;}
+.rb-primary:hover{background:#106ebe;}
 .rb-source{margin-left:auto; gap:6px;}
 .rb-label{font-size:11px; color:var(--muted); margin-right:2px;}
 .rb-toggle{
@@ -102,7 +103,7 @@ input,textarea,select{font-family:inherit;}
 .rail-svg{width:22px; height:22px; display:block;}
 .rail-btn em{font-style:normal;}
 .rail-btn:hover{background:var(--hover-bg); color:var(--text);}
-.rail-btn.active{background:var(--sel-bg); color:#fff;}
+.rail-btn.active{background:var(--sel-bg); color:var(--accent);}
 .rail-btn.active span{filter:none;}
 .rail-spacer{flex:1;}
 
@@ -121,20 +122,20 @@ input,textarea,select{font-family:inherit;}
 .fld-item.active{background:var(--sel-bg); font-weight:600;}
 .fld-item.active::before{content:''; position:absolute;}
 .fld-ic{width:18px; text-align:center;}
-.fld-count{margin-left:auto; font-size:11px; color:#7fe6b6; background:#123a33; padding:1px 8px; border-radius:10px; min-width:22px; text-align:center;}
+.fld-count{margin-left:auto; font-size:11px; color:#0078d4; background:#e5f1fb; padding:1px 8px; border-radius:10px; min-width:22px; text-align:center;}
 .fld-foot{margin-top:auto; padding:10px 6px 12px; border-top:1px solid var(--border);}
 .sync-info{font-size:11px; color:var(--muted); margin-bottom:6px; line-height:1.4;}
-.update-badge{font-size:11px; padding:5px 8px; border-radius:5px; margin-bottom:6px; background:#1d2f34;}
-.update-badge.info{background:#123a33; color:#7fe6b6;}
+.update-badge{font-size:11px; padding:5px 8px; border-radius:5px; margin-bottom:6px; background:#ffffff;}
+.update-badge.info{background:#e5f1fb; color:#0078d4;}
 .update-badge.ready{background:#0a84ff; color:#fff;}
-.key-status{font-size:11px; padding:5px 8px; border-radius:5px; background:#3a1f1f; color:#ff9a9a;}
-.key-status.ok{background:#123a33; color:#7fe6b6;}
+.key-status{font-size:11px; padding:5px 8px; border-radius:5px; background:#fde7e9; color:#a80000;}
+.key-status.ok{background:#e5f1fb; color:#0078d4;}
 
 /* 콘텐츠 */
 #content{flex:1; min-width:0; background:var(--read-bg); position:relative; display:flex;}
 .view{display:none !important; flex:1; min-width:0;}
 .view.active{display:flex !important;}
-.scroll-view{flex-direction:column; overflow-y:auto; padding:22px 26px;}
+.scroll-view{flex-direction:column; overflow-y:auto; padding:22px 26px; background:#faf9f8;}
 .chat-view{flex-direction:column;}
 
 /* ---------------- 메일 뷰: 리스트 + 읽기창 ---------------- */
@@ -145,7 +146,7 @@ input,textarea,select{font-family:inherit;}
   border-bottom:1px solid var(--border); font-weight:600; font-size:14px; flex-shrink:0;
 }
 .mlp-attach{margin-left:auto; font-size:11px; color:var(--muted); font-weight:400; display:flex; align-items:center; gap:4px;}
-.realtime-dot{font-size:11px; color:#7fe6b6; font-weight:400;}
+.realtime-dot{font-size:11px; color:#107c10; font-weight:400;}
 .mail-list{flex:1; overflow-y:auto;}
 
 /* 메일 리스트 아이템 (Outlook 스타일) */
@@ -165,12 +166,12 @@ input,textarea,select{font-family:inherit;}
 .mi-sender{font-weight:600; font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .mi-date{font-size:11px; color:var(--muted2); flex-shrink:0;}
 .mi-subject{font-size:12.5px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
-.mi-subject.unread{font-weight:700; color:#fff;}
+.mi-subject.unread{font-weight:700; color:#000;}
 .mi-preview{font-size:11.5px; color:var(--muted); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .mi-tags{display:flex; gap:5px; margin-top:4px;}
 .mi-unread-bar{position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--accent);}
-.lang-tag{font-size:10px; background:#1d2f34; color:var(--muted); padding:1px 6px; border-radius:8px;}
-.attach-tag{font-size:10px; background:#123a33; color:#7fe6b6; padding:1px 6px; border-radius:8px;}
+.lang-tag{font-size:10px; background:#ffffff; color:var(--muted); padding:1px 6px; border-radius:8px;}
+.attach-tag{font-size:10px; background:#e5f1fb; color:#0078d4; padding:1px 6px; border-radius:8px;}
 
 /* 읽기창 */
 .reading-pane{flex:1; min-width:0; background:var(--read-bg); overflow-y:auto;}
@@ -185,22 +186,22 @@ input,textarea,select{font-family:inherit;}
 .rp-from-name{font-weight:600;}
 .rp-from-mail{font-size:12px; color:var(--muted);}
 .rp-meta{font-size:12px; color:var(--muted); margin:2px 0; line-height:1.6;}
-.rp-atts{margin:14px 0; padding:12px; background:var(--card-bg); border-radius:8px;}
+.rp-atts{margin:14px 0; padding:12px; background:#f8f8f8; border:1px solid var(--border); border-radius:8px;}
 .rp-atts b{display:block; margin-bottom:8px;}
 .rp-atts ul{list-style:none;}
 .rp-atts li{padding:5px 0; font-size:12.5px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 .rp-actions{display:flex; gap:8px; margin:16px 0; flex-wrap:wrap;}
 .rp-body{
   margin-top:16px; padding-top:16px; border-top:1px solid var(--border);
-  font-size:13.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; color:#e5eaeb;
+  font-size:13.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; color:var(--text);
 }
 .rp-ai-result{margin-top:18px;}
 
 /* ---------------- 공통 버튼 ---------------- */
 .btn-primary{background:var(--accent); color:#fff; border:none; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:500;}
-.btn-primary:hover{background:#2b95ff;}
+.btn-primary:hover{background:#106ebe;}
 button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-toggle){
-  background:#1d2f34; border:1px solid var(--border); padding:8px 14px; border-radius:6px; font-size:13px;
+  background:#ffffff; border:1px solid var(--border); padding:8px 14px; border-radius:6px; font-size:13px;
 }
 button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-toggle):hover{background:var(--hover-bg);}
 .link-btn{background:transparent!important; border:none!important; color:var(--accent)!important; padding:2px 6px!important; font-size:12px!important;}
@@ -210,7 +211,7 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 .view-header h1{font-size:20px; margin-bottom:6px;}
 .hint{color:var(--muted); font-size:12.5px; line-height:1.5;}
 .search-row{display:flex; gap:8px; margin-top:12px; align-items:center; flex-wrap:wrap;}
-.search-row input{flex:1; min-width:180px; background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
+.search-row input{flex:1; min-width:180px; background:#ffffff; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
 
 /* ---------------- 대시보드 ---------------- */
 .stat-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:20px;}
@@ -218,7 +219,7 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 .stat-num{font-size:30px; font-weight:700; color:var(--accent);}
 .stat-label{font-size:12px; color:var(--muted); margin-top:4px;}
 .briefing-bar{display:flex; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
-.brief-btn{background:#1d2f34; border:1px solid var(--border); padding:6px 14px; border-radius:16px; font-size:12px;}
+.brief-btn{background:#ffffff; border:1px solid var(--border); padding:6px 14px; border-radius:16px; font-size:12px;}
 .brief-btn.active{background:var(--accent); border-color:var(--accent); color:#fff;}
 .briefing-result{background:var(--card-bg); border:1px solid var(--border); border-radius:10px; padding:18px; min-height:120px; margin-bottom:18px;}
 .briefing-meta{font-size:11px; color:var(--muted); margin-bottom:10px;}
@@ -228,7 +229,7 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 .dash-box h3{font-size:14px; margin-bottom:10px;}
 .sender-row{display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #1b2b2f; font-size:13px;}
 .sender-row:last-child{border-bottom:none;}
-.badge{background:#123a33; color:#7fe6b6; padding:1px 9px; border-radius:10px; font-size:11px;}
+.badge{background:#e5f1fb; color:#0078d4; padding:1px 9px; border-radius:10px; font-size:11px;}
 .empty-sm{color:var(--muted2); font-size:12px; padding:8px 0;}
 
 /* ---------------- 대화 ---------------- */
@@ -243,7 +244,7 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 .file-chip .remove{cursor:pointer; color:var(--muted); font-weight:700;}
 .chat-input-bar{display:flex; align-items:flex-end; gap:8px; padding:14px 26px 18px; border-top:1px solid var(--border);}
 #btn-attach{font-size:18px; padding:9px 12px!important;}
-#chat-input{flex:1; resize:none; background:#1d2f34; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:11px 14px; outline:none; max-height:140px; line-height:1.5;}
+#chat-input{flex:1; resize:none; background:#ffffff; border:1px solid var(--border); color:var(--text); border-radius:8px; padding:11px 14px; outline:none; max-height:140px; line-height:1.5;}
 
 /* ---------------- 주소록 ---------------- */
 .contact-list{display:flex; flex-direction:column; gap:2px;}
@@ -260,26 +261,26 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 .settings-card h2{font-size:14px; margin-bottom:12px;}
 .key-inputs{display:flex; flex-direction:column; gap:8px;}
 .key-inputs label{display:flex; align-items:center; gap:10px; font-size:12px; color:var(--muted);}
-.key-inputs input{flex:1; background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
+.key-inputs input{flex:1; background:#ffffff; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
 .show-keys{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); margin-top:10px;}
 .radio-group{display:flex; flex-direction:column; gap:10px;}
 .radio-group label{display:flex; gap:8px; font-size:13px; line-height:1.5; align-items:flex-start;}
 .radio-group input{margin-top:3px;}
 .pst-row{display:flex; gap:8px; margin-top:12px;}
-.pst-row input{flex:1; background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
+.pst-row input{flex:1; background:#ffffff; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px; outline:none;}
 .range-row{display:flex; gap:16px; margin-top:12px;}
 .range-row label{font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center;}
-.range-row input{background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px;}
-.conn-status{margin-top:12px; font-size:12px; padding:8px 12px; border-radius:6px; background:#1d2f34; color:var(--muted);}
-.conn-status.ok{background:#123a33; color:#7fe6b6;}
-.conn-status.bad{background:#3a1f1f; color:#ff9a9a;}
+.range-row input{background:#ffffff; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px;}
+.conn-status{margin-top:12px; font-size:12px; padding:8px 12px; border-radius:6px; background:#ffffff; color:var(--muted);}
+.conn-status.ok{background:#e5f1fb; color:#0078d4;}
+.conn-status.bad{background:#fde7e9; color:#a80000;}
 .inline-check{display:flex; align-items:center; gap:8px; font-size:13px;}
 .inline-num{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-top:12px;}
-.inline-num input, #max-mails{width:120px; background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px;}
-#model-select{width:100%; max-width:360px; background:#1d2f34; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px;}
+.inline-num input, #max-mails{width:120px; background:#ffffff; border:1px solid var(--border); color:var(--text); padding:7px 10px; border-radius:6px;}
+#model-select{width:100%; max-width:360px; background:#ffffff; border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:6px;}
 .settings-actions{display:flex; align-items:center; gap:12px; max-width:820px;}
-.saved-msg{color:#7fe6b6; font-size:13px;}
-.reply-draft{background:#123a33; border:1px solid #1c5e46; border-radius:8px; padding:12px; margin-top:8px;}
+.saved-msg{color:#107c10; font-size:13px;}
+.reply-draft{background:#e5f1fb; border:1px solid #a7d8a7; border-radius:8px; padding:12px; margin-top:8px;}
 .reply-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:600;}
 .reply-draft pre{white-space:pre-wrap; word-break:break-word; font-family:inherit; font-size:13px; line-height:1.6;}
 .prev-analyses{margin-top:14px;}
@@ -298,6 +299,6 @@ button:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.rb-togg
 
 /* 스크롤바 */
 ::-webkit-scrollbar{width:10px; height:10px;}
-::-webkit-scrollbar-thumb{background:#2a3d42; border-radius:5px;}
-::-webkit-scrollbar-thumb:hover{background:#344a50;}
+::-webkit-scrollbar-thumb{background:#c8c6c4; border-radius:5px;}
+::-webkit-scrollbar-thumb:hover{background:#a19f9d;}
 ::-webkit-scrollbar-track{background:transparent;}
