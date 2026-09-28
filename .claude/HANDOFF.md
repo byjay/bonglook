@@ -1,0 +1,48 @@
+# HANDOFF — Bmail (bonglook)
+
+## 미완료 (2026-09-28 갱신 — 1~4 완료, 5~6 대기)
+5. [ ] 첨부 내용 분석(PDF·XLSX·DOCX 텍스트 + 이미지는 무료 비전모델) — scout 정찰 후 별도 발주.
+6. [ ] **Jev 판정 도입** — 백엔드 결정 완료(아래 참조: JevK5 로컬 자가호스팅). 대상: 처리상태 제안 ·
+   주제 분류 · 회신필요(noul) · 광고판정(noul) · 의도 라우팅 보조. 한국어 20건+ LLM 대조 일치율 실측
+   후에만 본적용. OpenRouter Jev API(`/api/alpha/decisions`, `typesafe/jev-1.13`)는 이번 세션의
+   freeOnly 가드가 막지 않도록 경로가 이미 분리돼 있음을 확인(가드는 `cerebras.chatOnce`의
+   `/chat/completions` 전용, Jev 경로는 별개) — 단 마스터가 (B) JevK5 로컬을 택했으므로 OpenRouter
+   Jev API 자체는 안 쓴다(잔액 음수 방지). 키 저장 위치는 `apiKeysByProvider.openrouter` 1곳(SoT).
+
+## 완료분 (2026-09-28)
+1. [x] 답장 초안 TypeError 수정 — `aiBoxEl()`/`aiq()` 공유 헬퍼 신설, box 보유 호출부는 `box.querySelector`.
+   동일 패턴 전수 수정(rpDraftReply·refineAnalysis·refineDraft·showPrevDraft·updateIterVersionLabel·
+   저장분석 자동표시). selfcheck 뮤테이션 증명(FAIL→PASS) 완료. 상세: CONTEXT.md 2026-09-28.
+2. [x] OpenRouter 무료 전용 전면 교체 — 1순위 OpenRouter(models[] 폴백 3개, 무료원천 3중 방어),
+   2순위 Groq, Cerebras 체인 제거(키는 apiKeysByProvider.cerebras 에 보존). 대화형(OpenRouter우선)/
+   배치(Groq우선) 이중 체인. 실측표·실호출(실제 메일 1건 분석+답장초안 성공)·Groq폴백 전부
+   CONTEXT.md 2026-09-28 참조.
+3. [x] 키 소스 하드코딩 제거 — src/main.js 완전 제거, `grep -rE "csk-|gsk_|sk-or-" src/ scripts/` = 0건.
+   라이브 config 유실 없음(먼저 실측 확인 후 이관).
+4. [x] 검증 통과분 커밋 완료 — 해시는 세션 보고 참조.
+
+## 결정·가정
+- "절대 무료로만" → 유료 경로 코드 차단(3중 방어: normalizeEntry·sortModels·chatOnce+cost가드).
+  Groq 는 무료라 폴백으로 유지.
+- OpenRouter 무료 일일 한도 = **1,000회(실측 확정 2026-09-28, "50회"는 이전 추정 — /api/v1/key
+  응답의 free_model_daily_requests.limit 필드로 확인)**. 배치·자동작업은 Groq 로, 사용자 직접 요청을
+  OpenRouter 로(cerebras.js 이중 체인 + analyzer.js briefing/dailyBriefing/workLog 에 mode:'batch').
+
+## Jev 실측 (2026-09-28)
+- 경로 `POST openrouter.ai/api/alpha/decisions` model `typesafe/jev-1.13` → HTTP 200, 0.31s, 1회 $0.000028 (입력 671tok)
+- 🔴 **계정 total_credits=0, total_usage=0.000471 → 잔액 음수.** Jev 는 `:free` 아님 → 호출할수록 부채 누적, 음수 잔액은 무료 LLM 까지 막을 위험.
+- 한국어 표본 1건(CC 수신 도면메일): action todo p=0.21 · reply_needed 0.51 · theme 도면 0.61 → **전부 0.70 미만(LLM 승격)**. 1건이라 결론 불가, 20건 측정 필요. 설계 팁: criteria 키·instructions 영어 + state 한국어로 재측정.
+- 백엔드 선택지: (A) OpenRouter 크레딧 충전 후 API (B) **JevK5 로컬 자가호스팅**(Apache-2.0, Qwen3.5-4B+LoRA, /v1/systemone 호환, GTX1660S 6GB 적재 가능 추정 — 무료·메일 외부전송 0) → **마스터 결정(2026-09-28): (B) JevK5 로컬.** 모델 다운로드 승인 포함. OpenRouter Jev API 는 사용 안 함(잔액 음수 방지).
+   진행 순서(발주 1건씩): ① 현 OpenRouter 교체 발주 완료 대기 → ② scout: JevK5 실행 방법·크기·요구사양·GTX1660S 6GB 적재 가능 여부·Windows 구동 경로 조사 → ③ coder: 로컬 서버 기동 + Jev 어댑터(백엔드 교체 가능 구조, /v1/systemone 호환) + FILEMAP.md 생성 → ④ 한국어 20건+ LLM 대조 일치율·폴백률·지연 실측 → 통과 대상만 본적용.
+
+## 문서 부트스트랩 (2026-09-28)
+- `CLAUDE.md`(정체 카드) 신설, `ECOSYSTEM_START_GUIDE.md` §14 레지스트리 1줄 등록. FILEMAP.md 미생성(다음 발주에서 `_warehouse/05-scripts-build/filemap.mjs` 로 생성).
+
+## 환경
+- `node` 기본 PATH 없음 → 문법검사·selfcheck 등은 `ELECTRON_RUN_AS_NODE=1 ./node_modules/electron/dist/electron.exe`로 충분.
+  단 **electron-builder 빌드(`npm run dist`)는 이 방식으로 돌리면 실패**(argv 슬라이스가 어긋나 "Unknown
+  arguments", app-builder.exe 하위 프로세스가 STATUS_DLL_INIT_FAILED로 죽음, 2026-09-28 실측) →
+  빌드만은 `export PATH="/c/Users/FREE/AppData/Roaming/fnm/node-versions/v20.17.0/installation:$PATH"`
+  로 진짜 node(v20.17.0)를 PATH에 올려 `node node_modules/electron-builder/out/cli/cli.js build --win --x64`
+  로 실행할 것.
+- 마스터 PC 실사용 중 → 포커스 뺏는 자동 조작 금지
