@@ -1352,7 +1352,11 @@ ipcMain.handle('reply:classifyBatch', async (_e, opts) => {
       days: o.days || 30, limit: o.limit || 200, minDays: o.minDays === undefined ? 1 : o.minDays,
       sort: 'date', excludeClosed: true
     });
-    const targets = cand.filter(m => m.replyUnclassified);
+    // 🔴 1회 상한(기본 50건) — 미분류가 한꺼번에 몰려도 한 트리거에서 전부 소진하지 않는다.
+    //   (다음 loadFollowup() 진입/동기화 때 남은 건이 이어서 증분 판정됨 — 재판정 아님, 미분류만 골라 계속 좁혀감)
+    const maxBatch = Number.isFinite(o.maxBatch) && o.maxBatch > 0 ? o.maxBatch : 50;
+    const allTargets = cand.filter(m => m.replyUnclassified);
+    const targets = allTargets.slice(0, maxBatch);
     if (!targets.length) return { ok: true, classified: 0, total: 0 };
 
     const items = targets.map(t => {
@@ -1380,7 +1384,7 @@ ipcMain.handle('reply:classifyBatch', async (_e, opts) => {
         classified++;
       } else failed++;
     }
-    return { ok: true, classified, failed, total: targets.length };
+    return { ok: true, classified, failed, total: targets.length, remaining: Math.max(0, allTargets.length - targets.length) };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 

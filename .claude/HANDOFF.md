@@ -6,7 +6,25 @@
 7. [x] **회신 필요성(의미) 판정 층 추가 완료(2026-09-28)** — HANDOFF 이전 기록("#6729 제목 정규화 매칭 실패")은
    **틀렸다**(지휘자 직접 재현으로 정정). 진짜 원인: 기존 unansweredMails() 는 "내가 답장했는가"(사실)만 보고
    "회신이 필요한가"(의미)는 안 본다 — 수정통보·참고도면처럼 답이 필요 없는 메일도 미회신으로 쌓인다.
-   상세: 아래 「7번 완료 상세」 참조.
+   상세: 아래 「7번 완료 상세」 참조. (커밋 bd683a3)
+7-1. [x] **7번 후속 미완 2건 — 코드 완료(2026-09-29), 커밋 X, 빌드·설치·실DB 판정(앱 실행 경로)은 C: 디스크 확보 후**:
+   ① 「불필요 20건 + 필요 전체」표 — readonly 재측정(`scripts/reply-needed-measure3.mjs`, DB 쓰기 0·E: 출력만) 완료.
+      40건 표본 결과: 성공 40/40 · **필요 13건** · 불필요 27건(무작위 20건 표 포함) · 판단불확실 0.
+      (2026-09-28 측정치 "필요 6건"과 다름 — 시드·표본이 달라 자연스러운 차이, 재현성 위해 seeded shuffle 사용.
+      산출물 `scripts/reply-needed-sample.md`는 개인 메일 제목 포함이라 `.gitignore` 등록, **커밋 안 함**.)
+   ② 자동 판정 트리거 — **이미 존재했다**(bd683a3 에 포함, renderer.js `loadFollowup()` 내
+      `if (mails.some(m => m.replyUnclassified)) window.api.replyClassifyBatch(...)`, 호출 지점
+      624·2151·2494·2499·3166-3167). 다만 실행 시 **전체화면 로딩(`.loading`, z-index:999)을 띄워
+      사용자 조작을 침범하는 결함**을 코드 추적으로 발견·수정(`handleAiProgress` kind==='replyNeeded' 분기 →
+      비침습 텍스트 `#fu-classify-progress`로 분리). 추가: main.js `reply:classifyBatch`에 1회 상한
+      `maxBatch`(기본 50) 신설, 「판정 대기」배지(`.fu-unclassified-badge`, 대비 7.78:1) 신설.
+      selfcheck 신규 3건(트리거 존재·maxBatch 존재·전체화면로딩 미사용) + **뮤테이션 증명**: 트리거 guard 를
+      `if (false && ...)`로 무력화 → selfcheck FAIL(EXIT=1) 확인 후 원복 → 재실행 PASS(diff 없음) 확인.
+   커밋 6ba3378 (`.gitignore`·main.js·scripts/selfcheck.mjs·scripts/reply-needed-measure3.mjs·
+   src/renderer/{index.html,renderer.js,style.css}).
+8. [ ] 🔴 **C: 디스크 여유 0.1~1.25GB(2026-09-28 실측)** — Outlook·Bmail DB 가 C: 사용 → 손상 위험. 이번 세션 기여 약 2.5GB(HF 캐시 1.38·Temp\claude 1.18, 세션 스크래치 0.01)로 주범 아님. 앞 에이전트의 "Temp 32GB e2e-prof" 주장은 **거짓**(전수 검색 0건). 주범 정밀 정찰 중. 삭제는 마스터 직접(안전 규칙).
+9. [ ] 🔴 **Bmail 전체 E: 이전(마스터 지시 2026-09-29 "C 드라이브는 건들지 말고 E 에서 진행")** — 7-1 발주 완료 후 착수. 범위: ① 실행 위치: 설치본(C:\...\Programs) 대신 E: 의 실행본(예: release\win-unpacked 또는 E:\Apps\Bmail) + 바로가기 재지정 ② 데이터(userData·DB 711MB): 설정 가능한 데이터 경로(기본값은 타 사용자용 APPDATA 유지, 마스터 PC 는 E:\BmailData) — 앱 종료 → 복사 → 건수·무결성 대조 → 전환. **C: 원본은 삭제하지 않고 백업으로 둔다(정리는 마스터 결정)** ③ 빌드 캐시·TEMP·npm·electron-builder 캐시 E: 고정. 설계 변경+데이터 이전이라 모델 등급은 jev_route 로 판정.
+   → **주범 확인(지휘자 실측)**: `C:\Users\FREE\AppData\Local\Docker\wsl\disk\docker_data.vhdx` **59.9GB**(최종 기록 2026-09-01, 이번 세션 무관). Downloads 3.6GB. Windows.old·C: Outlook 데이터 없음. 나머지 ~370GB 는 설치 앱 추정(미측정). 마스터께 Docker Clean/Purge 또는 제거 안내함. **디스크 확보 확인 후 7-1 재개.**
 - 6번 Jev 결론(지휘자, 2026-09-28): **Bmail 실시간 경로 미적용.** 근거 — 적용 0/4(처리상태 규칙 열세·광고 동률·주제/회신 문턱 미달), CPU 모드 Jev 15.7s > LLM 6.3s, 신규 메일량은 무료 LLM 1000회/일로 충분. 어댑터·측정도구(`src/jev.js`·`jev-server.js`·`scripts/jev-measure*.mjs`)는 보존 — GPU 유휴 시 과거 메일 야간 일괄 분류 용도. Jev 10배 후보 1순위는 wd-checker(스킬 §10-4). 마스터가 강제 적용 원하면 주제 분류 「추정」 표시로.
 6. [ ] **Jev 판정 도입** — 백엔드 결정 완료(아래 참조: JevK5 로컬 자가호스팅). 대상: 처리상태 제안 ·
    주제 분류 · 회신필요(noul) · 광고판정(noul) · 의도 라우팅 보조. 한국어 20건+ LLM 대조 일치율 실측

@@ -876,6 +876,16 @@ async function generateBriefing() {
 //  AI 대량 처리 진행 표시 (청크 map-reduce)
 // ------------------------------------------------------------
 function handleAiProgress({ kind, phase, cur, total, msg }) {
+  // 🔴 회신 필요성 백그라운드 배치 판정은 전체화면 로딩(#loading, z-index:999)을 띄우면 안 된다
+  //   (사용자 조작 방해 없음이 설계 전제 — HANDOFF 7번). 회신대기 뷰의 작은 텍스트로만 표시한다.
+  if (kind === 'replyNeeded') {
+    const el = $('#fu-classify-progress');
+    if (!el) return;
+    if (phase === 'done') { el.classList.add('hidden'); el.textContent = ''; return; }
+    el.textContent = `${cur}/${total}건 판정 중`;
+    el.classList.remove('hidden');
+    return;
+  }
   const label = phase === 'wait' ? msg
     : (phase === 'reduce' ? `종합 중... (${total}개 묶음)`
       : (phase === 'done' ? '정리 완료' : `묶음 ${cur}/${total} 처리 중...`));
@@ -1523,7 +1533,7 @@ async function loadFollowup() {
         html += `<button class="fu-item" data-mid="${m.id}">
             <span class="fu-days ${m.daysWaiting >= 14 ? 'fu-hot' : ''}">${m.daysWaiting}일</span>
             <span class="fu-main">
-              <span class="fu-subject">${importanceMarker(m)}${categoryDots(m)}${escapeHtml(m.subject || '(제목 없음)')}${actionBadge(m)}${m.replyUncertain ? ' <span class="fu-uncertain-badge" title="LLM 판단 불확실(신뢰도 낮음) — 안전을 위해 필요 쪽에 둠">판단 불확실</span>' : ''}</span>
+              <span class="fu-subject">${importanceMarker(m)}${categoryDots(m)}${escapeHtml(m.subject || '(제목 없음)')}${actionBadge(m)}${m.replyUnclassified ? ' <span class="fu-unclassified-badge" title="아직 회신 필요성 판정 전 — 안전을 위해 필요 쪽에 두고 곧 자동 판정됩니다">판정 대기</span>' : (m.replyUncertain ? ' <span class="fu-uncertain-badge" title="LLM 판단 불확실(신뢰도 낮음) — 안전을 위해 필요 쪽에 둠">판단 불확실</span>' : '')}</span>
               <span class="fu-meta"><span class="fu-src">${escapeHtml(m.fuSource || '미회신')}</span>${escapeHtml(m.sender_name || m.sender_email || '')} · ${escapeHtml(m.received_at || '')} · ${escapeHtml(m.folder || '')}${m.has_attach ? ' · 첨부' : ''}${m.task_due ? ' · 기한 ' + escapeHtml(m.task_due) : ''}</span>
               <span class="fu-prev">${escapeHtml((m.preview || '').replace(/\s+/g, ' ').slice(0, 110))}</span>
               ${isNotNeeded && m.reply_needed_reason ? `<span class="fu-reason">불필요 이유: ${escapeHtml(m.reply_needed_reason)}${m.replyManual ? ' (수동 지정)' : ''}</span>` : ''}
@@ -1584,8 +1594,12 @@ async function loadFollowup() {
     //   결과가 생기면 목록만 조용히 새로고침한다(사용자 조작 방해 없음).
     if (mails.some(m => m.replyUnclassified)) {
       window.api.replyClassifyBatch({ days: 30, limit: 200, minDays: followupMinDays })
-        .then(r => { if (r && r.ok && r.classified > 0 && $('#view-followup') && $('#view-followup').classList.contains('active')) loadFollowup(); })
-        .catch(() => {});
+        .then(r => {
+          const prog = $('#fu-classify-progress');
+          if (prog) { prog.classList.add('hidden'); prog.textContent = ''; }
+          if (r && r.ok && r.classified > 0 && $('#view-followup') && $('#view-followup').classList.contains('active')) loadFollowup();
+        })
+        .catch(() => { const prog = $('#fu-classify-progress'); if (prog) { prog.classList.add('hidden'); prog.textContent = ''; } });
     }
   } catch (err) {
     box.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;

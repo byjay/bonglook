@@ -10,3 +10,4 @@ attachments/
 *.db
 *.db-wal
 *.db-shm
+scripts/reply-needed-sample.md

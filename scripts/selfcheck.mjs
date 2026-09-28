@@ -144,5 +144,38 @@ try {
   diff === 0 ? ok('AI 박스(#rs-ai-body) 안 요소를 aiq/box.querySelector 로 정상 조회, rpq 는 못 찾음(회귀 재현 확인)') : bad(`AI 박스 조회 회귀 ${diff}건`);
 } catch (e) { bad('AI 박스 조회 회귀 테스트 실패: ' + e.message); }
 
+// ---- N) 회신 필요성 자동 판정 트리거 존재 확인 (2026-09-29, HANDOFF 7-1) ----
+//   loadFollowup() 진입 시(초기/뷰전환/동기화 후 전부 이 함수를 거침 — renderer.js 624·2151·2494·2499·
+//   3166-3167) 미분류 후보(replyUnclassified)가 있으면 reply:classifyBatch 를 자동 호출해야 한다.
+//   이 블록이 없어지면(=141건이 앱에서 영영 미분류로 남는 결함) 반드시 FAIL 해야 한다.
+console.log(`[${n++}] 회신 필요성 자동 판정 트리거 존재 확인`);
+try {
+  const rsrc = readFileSync(join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8').replace(/\r\n/g, '\n');
+  const loadFollowupSrc = (() => {
+    const m = rsrc.match(/async function loadFollowup\(\)[\s\S]*?\n}\n/);
+    if (!m) throw new Error('loadFollowup() 함수를 renderer.js 에서 찾지 못함');
+    return m[0];
+  })();
+  const hasGuard = /if\s*\(\s*mails\.some\(m => m\.replyUnclassified\)\s*\)/.test(loadFollowupSrc);
+  const hasCall = /window\.api\.replyClassifyBatch\(/.test(loadFollowupSrc);
+  if (hasGuard && hasCall) ok('loadFollowup() 안에 미분류 후보 → replyClassifyBatch 자동 호출 트리거 존재');
+  else bad(`자동 판정 트리거 누락(guard=${hasGuard}, call=${hasCall}) — 141건이 앱에서 영영 미분류로 남을 위험`);
+
+  // main.js 쪽 1회 상한(과도한 동시 배치 방지) 존재 확인
+  const msrc = readFileSync(join(ROOT, 'src', 'main.js'), 'utf8').replace(/\r\n/g, '\n');
+  if (/maxBatch/.test(msrc) && /reply:classifyBatch/.test(msrc)) ok('reply:classifyBatch 1회 상한(maxBatch) 존재');
+  else bad('reply:classifyBatch 1회 상한(maxBatch) 누락');
+
+  // 전체화면 로딩(.loading) 오버레이를 replyNeeded 배치에 쓰지 않는지 확인(사용자 조작 방해 없음)
+  const hp = (() => {
+    const m = rsrc.match(/function handleAiProgress\([^)]*\)\s*\{[\s\S]*?\n}\n/);
+    if (!m) throw new Error('handleAiProgress() 를 renderer.js 에서 찾지 못함');
+    return m[0];
+  })();
+  const guardsShowLoading = /kind === 'replyNeeded'[\s\S]*?return;/.test(hp) && hp.indexOf("kind === 'replyNeeded'") < hp.indexOf('showLoading(label)');
+  guardsShowLoading ? ok('replyNeeded 진행상황은 전체화면 로딩을 띄우지 않음(비침습 표시로 분리)')
+    : bad('replyNeeded 진행상황이 전체화면 로딩(.loading)을 침범할 위험');
+} catch (e) { bad('자동 판정 트리거 확인 실패: ' + e.message); }
+
 console.log(failed ? `\n셀프체크 실패 ${failed}건` : '\n셀프체크 전부 통과');
 process.exit(failed ? 1 : 0);
