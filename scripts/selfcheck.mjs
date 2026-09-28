@@ -68,7 +68,7 @@ try {
 
 // ---- 3) 모듈별 셀프체크 (파일이 있을 때만) ----
 let n = 3;
-for (const mod of ['action-state.js', 'dashboard-agg.js', 'exporter.js', 'sent-axis.js', 'attach-organize.js', 'ai-errors.js', 'ai-providers.js', 'jev.js', 'attachments.js', 'attach-content.js']) {
+for (const mod of ['action-state.js', 'dashboard-agg.js', 'exporter.js', 'sent-axis.js', 'attach-organize.js', 'ai-errors.js', 'ai-providers.js', 'jev.js', 'attachments.js', 'attach-vision.js', 'attach-content.js']) {
   const p = join(ROOT, 'src', mod);
   if (!existsSync(p)) continue;
   console.log(`[${n++}] ${mod} 셀프체크`);

@@ -1,6 +1,6 @@
 # FILEMAP — bonglook
-생성: 2026-09-28 19:22 · `node filemap.mjs` 로 재생성
-파일 40개 · 역할 미기재 13개 · 고아 15개
+생성: 2026-09-28 19:34 · `node filemap.mjs` 로 재생성
+파일 41개 · 역할 미기재 13개 · 고아 15개
 
 ## 진입점
 - package.json
@@ -25,21 +25,22 @@
 | scripts/selfcheck.mjs | ⚠ 역할 미기재 | 8.9KB | 0 | 0 |
 | src/action-state.js | action-state.js — 메일별 '내 처리 상태' 정의 · 자동 제안 (순수 함수 · 의존성 0) | 12.5KB | 0 | 1 |
 | src/ai-errors.js | ai-errors.js — AI 호출 실패를 '사람이 읽는 문구'로 바꾸는 단일 책임 모듈 | 9.1KB | 0 | 2 |
-| src/ai-providers.js | ai-providers.js — AI 제공자 프리셋 · 다중 제공자 체인 (단일 책임) | 26.2KB | 0 | 2 |
+| src/ai-providers.js | ai-providers.js — AI 제공자 프리셋 · 다중 제공자 체인 (단일 책임) | 26.2KB | 0 | 3 |
 | src/analyzer.js | analyzer.js - AI 기반 메일 분석 (Cerebras 사용) | 55.7KB | 1 | 1 |
 | src/attach-classify.js | 첨부 분류 (단일 책임: '진짜 첨부' vs '본문/서명에 박힌 인라인 이미지') | 6.2KB | 0 | 4 |
-| src/attach-content.js | attach-content.js — 첨부 '내용'을 분석 프롬프트에 넣기 위한 단일 진입점 | 10.7KB | 3 | 1 |
+| src/attach-content.js | attach-content.js — 첨부 '내용'을 분석 프롬프트에 넣기 위한 단일 진입점 | 16.7KB | 4 | 1 |
 | src/attach-organize.js | attach-organize.js — "대화로 첨부 정리" 단일 책임 모듈 | 30.3KB | 0 | 1 |
+| src/attach-vision.js | attach-vision.js — 이미지 첨부 무료 비전 분석 (마스터 지시: 첨부 분석 2단계) | 6.5KB | 2 | 1 |
 | src/attachments.js | attachments.js - 첨부파일 텍스트/데이터 추출 | 8.1KB | 0 | 3 |
 | src/bigmail.js | bigmail 연동 (대용량 첨부 업로드) | 7.9KB | 0 | 1 |
-| src/cerebras.js | cerebras.js - AI 추론 API 호출 (제공자 중립 · OpenAI 호환) | 37.7KB | 2 | 2 |
+| src/cerebras.js | cerebras.js - AI 추론 API 호출 (제공자 중립 · OpenAI 호환) | 37.7KB | 2 | 3 |
 | src/cleanup.js | cleanup.js — 로컬 저장물 정리 (스캔 = 안전 · 삭제 = 명시 요청 시에만) | 10.9KB | 0 | 0 |
 | src/dashboard-agg.js | dashboard-agg.js — 통합 대시보드 집계 (순수 함수 · 의존성 0) | 24.7KB | 0 | 1 |
 | src/db.js | db.js - 로컬 SQLite DB (better-sqlite3) | 133.8KB | 2 | 3 |
 | src/exporter.js | exporter.js — 산출물 생성 (통합 대시보드 HTML 1개 + 엑셀) | 28.7KB | 1 | 1 |
 | src/jev-server.js | jev-server.js — JevK5 로컬 온디맨드 서버 수명주기 (VRAM 확인 · 유휴 자동종료) | 6.8KB | 0 | 1 |
 | src/jev.js | jev.js — Jev(TypeSafe AI System One) 판정 어댑터 (단일 클라이언트, SoT) | 13.7KB | 1 | 0 |
-| src/main.js | Bmail - 메인 프로세스 (Electron main) | 155.0KB | 17 | 0 |
+| src/main.js | Bmail - 메인 프로세스 (Electron main) | 155.4KB | 17 | 0 |
 | src/outlook.js | outlook.js - Windows 로컬 Outlook / PST 연동 (PowerShell + COM) | 77.2KB | 1 | 2 |
 | src/preload.js | preload.js - 렌더러 ↔ 메인 프로세스 보안 다리 | 11.8KB | 0 | 0 |
 | src/pst.js | pst.js - PST 파일 직접 파싱 (Outlook 미실행 시 사용) | 7.0KB | 0 | 2 |

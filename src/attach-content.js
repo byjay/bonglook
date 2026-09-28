@@ -14,10 +14,12 @@ const path = require('path');
 const db = require('./db');
 const attachments = require('./attachments');
 const attachClassify = require('./attach-classify');
+const attachVision = require('./attach-vision');   // 이미지 첨부 무료 비전 분석(2단계)
 
 const PER_ATTACH_BUDGET_CHARS = 3000;     // 첨부 1건이 프롬프트에 들어갈 수 있는 상한
 const TOTAL_BUDGET_CHARS = 9000;          // 메일 1건 전체 첨부 내용 상한(제공자 컨텍스트에 비례해 조절 가능)
 const MAX_DOC_ATTACHMENTS = 5;            // 문서형 첨부는 최대 5건까지만 시도(토큰·시간 방어)
+const MAX_IMAGE_ATTACHMENTS = 3;          // 비전 호출은 첨부당 API 요청이라 더 보수적으로 제한
 
 // 이 모듈이 다루는 '문서류' 확장자 — 나머지(이미지·CAD·압축 등)는 여기서 건드리지 않는다.
 const DOC_EXT_PRIORITY = ['pdf', 'docx', 'xlsx', 'xls', 'csv', 'txt', 'md', 'json', 'log'];
@@ -48,15 +50,38 @@ async function ensureExtracted(row) {
   return db.getAttachmentById(row.id);
 }
 
+// 이미지 1건을 무료 비전 체인으로 설명하고 db 에 캐시한다(문서와 같은 extract_at 캐시 신호 재사용).
+async function ensureImageDescribed(row, visionKeys) {
+  if (row.extract_at) return row;   // ★ 캐시 hit — 재호출 금지(API 비용·시간 방어)
+  if (!row.saved_path || !fs.existsSync(row.saved_path)) {
+    db.updateAttachmentExtract(row.id, { extracted: '', kind: 'missing', failed: '로컬 저장본 없음(가져오기 실패)' });
+    return db.getAttachmentById(row.id);
+  }
+  try {
+    const ex = await attachments.extract(row.saved_path);   // dataUrl(base64) 생성
+    const vis = await attachVision.describeImage({ keys: visionKeys, dataUrl: ex.dataUrl, fileName: row.file_name });
+    if (vis.ok) {
+      db.updateAttachmentExtract(row.id, { extracted: vis.text, kind: 'image-vision', fullLen: vis.text.length, failed: null });
+    } else {
+      db.updateAttachmentExtract(row.id, { extracted: '', kind: 'image-vision', failed: vis.error || '이미지 분석 불가(무료 비전 모델 응답 없음)' });
+    }
+  } catch (e) {
+    db.updateAttachmentExtract(row.id, { extracted: '', kind: 'error', failed: `비전 분석 오류: ${String(e.message || e).slice(0, 200)}` });
+  }
+  return db.getAttachmentById(row.id);
+}
+
 // ------------------------------------------------------------
 //  메일 1건의 첨부 내용 컨텍스트를 만든다.
 //   mail: db.getMailById() 결과 (id 필요)
 //   opts.fetchMissingFn: async () => void — 저장본이 하나도 없을 때 1회 호출(Outlook 복사)
-//  반환: { text, chips, imageRows, skippedForBudget }
+//   opts.visionKeys: string[] — 주어지면 이미지 첨부도 비전 체인으로 설명해 함께 주입(2단계).
+//     없으면(기본) 이미지는 예전처럼 "별도 비전 분석 대상" 칩만 표시하고 API 호출은 하지 않는다.
+//  반환: { text, chips, imageRows }
 //   text  : 프롬프트에 그대로 넣을 "[첨부 내용]" 블록 문자열(내용이 없으면 '')
 //   chips : UI 표시용 [{ name, kind, ok, note }]
 // ------------------------------------------------------------
-async function buildAttachmentContext(mail, { fetchMissingFn = null } = {}) {
+async function buildAttachmentContext(mail, { fetchMissingFn = null, visionKeys = null } = {}) {
   if (!mail || !mail.id) return { text: '', chips: [], imageRows: [] };
   let rows = db.getAttachmentsByMail(mail.id);   // 기본이 '진짜 첨부만'
   const expected = Number(mail.real_attach_count != null ? mail.real_attach_count : mail.attach_count) || 0;
@@ -109,15 +134,35 @@ async function buildAttachmentContext(mail, { fetchMissingFn = null } = {}) {
     const ext = extOfRow(row);
     chips.push({ name: row.file_name, kind: ext, ok: false, note: `미지원 형식(.${ext || '?'})` });
   }
-  for (const row of imageRows) {
-    chips.push({ name: row.file_name, kind: 'image', ok: null, note: '이미지(별도 비전 분석 대상)' });
+
+  const hasVisionKeys = Array.isArray(visionKeys) && visionKeys.length > 0;
+  const imageTargets = imageRows.slice(0, MAX_IMAGE_ATTACHMENTS);
+  for (const row0 of imageRows) {
+    if (!hasVisionKeys || !imageTargets.includes(row0)) {
+      chips.push({ name: row0.file_name, kind: 'image', ok: null, note: '이미지(별도 비전 분석 대상)' });
+      continue;
+    }
+    const row = await ensureImageDescribed(row0, visionKeys);
+    if (row.extract_failed || !row.extracted) {
+      chips.push({ name: row.file_name, kind: 'image', ok: false, note: row.extract_failed || '이미지 분석 불가(무료 비전 모델 응답 없음)' });
+      continue;
+    }
+    const cap = Math.max(0, Math.min(PER_ATTACH_BUDGET_CHARS, remaining));
+    if (cap === 0) {
+      chips.push({ name: row.file_name, kind: 'image', ok: false, note: '전체 첨부 예산 초과로 미반영' });
+      continue;
+    }
+    const content = row.extracted.slice(0, cap);
+    remaining -= content.length;
+    chips.push({ name: row.file_name, kind: 'image', ok: true, note: '비전 분석 반영' });
+    blocks.push(`— ${row.file_name} (이미지, 비전 분석):\n${content}`);
   }
 
   const text = blocks.length ? ['', '[첨부 내용]', blocks.join('\n\n')].join('\n') : '';
   return { text, chips, imageRows };
 }
 
-module.exports = { buildAttachmentContext, ensureExtracted, DOC_EXT_SET, PER_ATTACH_BUDGET_CHARS, TOTAL_BUDGET_CHARS };
+module.exports = { buildAttachmentContext, ensureExtracted, ensureImageDescribed, DOC_EXT_SET, PER_ATTACH_BUDGET_CHARS, TOTAL_BUDGET_CHARS, MAX_IMAGE_ATTACHMENTS };
 
 // ============================================================
 //  셀프체크 — `node src/attach-content.js`  (better-sqlite3 필요 → Electron 노드로 실행)
@@ -176,7 +221,52 @@ if (require.main === module) {
       assert.strictEqual(ctx3.chips[0].ok, false); pass++;
       assert.ok(/미지원 형식/.test(ctx3.chips[0].note)); pass++;
 
-      console.log(`attach-content.js 셀프체크 OK — ${pass}건 통과(주입·예산표시·재추출금지 캐시·미지원 정직표시)`);
+      // 5) 이미지 첨부(2단계 비전) — visionKeys 없으면 API 호출 없이 안내 칩만(네트워크 비용 방어)
+      db.upsertMailsBatch([{ entryId: 'selftest-3', subject: '사진 메일', realAttachCount: 1, attachCount: 1 }]);
+      const mail3 = db.getMailByEntryId('selftest-3');
+      const imgPath = path.join(tmpUserData, 'photo.png');
+      fs.writeFileSync(imgPath, Buffer.from('89504e470d0a1a0a', 'hex'));   // PNG 헤더만(실디코딩 불필요, base64 인코딩만 확인)
+      db.addAttachment(mail3.id, { fileName: 'photo.png', sizeKB: 1, savedPath: imgPath, isInline: false });
+      const ctxNoVision = await buildAttachmentContext(mail3);
+      assert.strictEqual(ctxNoVision.chips[0].ok, null); pass++;
+      assert.ok(/비전 분석 대상/.test(ctxNoVision.chips[0].note)); pass++;
+
+      // visionKeys 있으면 attachVision.describeImage 를 통해 결과를 주입한다(네트워크 없이 모듈 스텁으로 검증)
+      const realDescribe = attachVision.describeImage;
+      let describeCalls = 0;
+      attachVision.describeImage = async () => { describeCalls++; return { ok: true, model: 'stub/vision', text: '엔진 사진: 호스와 밸브가 보임' }; };
+      try {
+        const ctxVision1 = await buildAttachmentContext(mail3, { visionKeys: ['k'] });
+        assert.strictEqual(ctxVision1.chips[0].ok, true); pass++;
+        assert.ok(ctxVision1.text.includes('엔진 사진: 호스와 밸브가 보임'), '비전 요약이 프롬프트에 주입되지 않음'); pass++;
+        assert.strictEqual(describeCalls, 1); pass++;
+
+        // 캐시 hit — 2차 호출은 describeImage 를 다시 부르지 않는다(비용 방어)
+        const ctxVision2 = await buildAttachmentContext(mail3, { visionKeys: ['k'] });
+        assert.strictEqual(describeCalls, 1, '이미지 비전 캐시가 있는데도 재호출함'); pass++;
+        assert.strictEqual(ctxVision2.chips[0].note, ctxVision1.chips[0].note); pass++;
+      } finally {
+        attachVision.describeImage = realDescribe;
+      }
+
+      // 전부 실패 시 정직한 실패 표시(거짓 성공 금지) — 새 이미지로 캐시 미스 상태에서 검증
+      db.upsertMailsBatch([{ entryId: 'selftest-4', subject: '사진 메일2', realAttachCount: 1, attachCount: 1 }]);
+      const mail4 = db.getMailByEntryId('selftest-4');
+      const imgPath2 = path.join(tmpUserData, 'photo2.png');
+      fs.writeFileSync(imgPath2, Buffer.from('89504e470d0a1a0a', 'hex'));
+      db.addAttachment(mail4.id, { fileName: 'photo2.png', sizeKB: 1, savedPath: imgPath2, isInline: false });
+      const realDescribe2 = attachVision.describeImage;
+      attachVision.describeImage = async () => ({ ok: false, error: '이미지 분석 불가(무료 비전 모델 응답 없음)' });
+      try {
+        const ctxFail = await buildAttachmentContext(mail4, { visionKeys: ['k'] });
+        assert.strictEqual(ctxFail.chips[0].ok, false); pass++;
+        assert.ok(/이미지 분석 불가/.test(ctxFail.chips[0].note)); pass++;
+        assert.strictEqual(ctxFail.text, '', '전부 실패했는데 내용 블록이 생김(지어내기 금지 위반)'); pass++;
+      } finally {
+        attachVision.describeImage = realDescribe2;
+      }
+
+      console.log(`attach-content.js 셀프체크 OK — ${pass}건 통과(주입·예산표시·재추출금지 캐시·미지원 정직표시·비전 주입/캐시/실패표시)`);
     } finally {
       try { db.close(); } catch (_) {}
       try { fs.rmSync(tmpUserData, { recursive: true, force: true }); } catch (_) {}

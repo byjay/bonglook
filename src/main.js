@@ -963,6 +963,9 @@ function applyAiConfig() {
 }
 function getKeys() { return aiConfig().keys; }
 function getModel() { return aiConfig().model || 'gpt-oss-120b'; }
+//  이미지 첨부 비전 분석(2단계)은 OpenRouter 무료 비전 모델 전용 — SoT(apiKeysByProvider.openrouter)
+//  키를 그대로 재사용한다(별도 키 저장소 신설 금지). 1순위 제공자가 OpenRouter 가 아니어도 항상 이 키를 쓴다.
+function getVisionKeys() { return ((store.get('apiKeysByProvider') || {}).openrouter || []).filter(k => k && k.trim()); }
 function getConcurrency() { const n = Number(store.get('aiConcurrency')); return Math.max(1, Math.min(Number.isFinite(n) && n > 0 ? n : 3, 3)); }
 
 // --- DB 상태 ---
@@ -2080,7 +2083,7 @@ ipcMain.handle('ai:translate', async (_e, { id, refine } = {}) => {
     try { attachments = (db.getAttachmentsByMail(id) || []).map(a => ({ name: a.file_name })); } catch (e) { attachments = []; }
     // ★ 첨부 '내용'(PDF·XLSX/CSV·DOCX·TXT) 주입 — 캐시 우선, 저장본 없으면 1회 COM 확보(읽기만).
     let attachmentContent = { text: '', chips: [] };
-    try { attachmentContent = await attachContent.buildAttachmentContext(mail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(mail) }); }
+    try { attachmentContent = await attachContent.buildAttachmentContext(mail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(mail), visionKeys: getVisionKeys() }); }
     catch (e) { attachmentContent = { text: '', chips: [] }; }
     const res = await analyzer.translateAnalyze({ keys, model: getModel(), mail, refine: refine || null, threadContext, attachments, attachmentContext: attachmentContent.text });
     let crossValidation = { enabled: false };
@@ -2300,7 +2303,7 @@ ipcMain.handle('ai:chatMails', async (_e, { question, history, context, focusMai
         : '';
       // ★ 첨부 '내용'(PDF·XLSX/CSV·DOCX·TXT) 주입 — 캐시 우선, 저장본 없으면 1회 COM 확보(읽기만).
       let attachmentContent = { text: '', chips: [] };
-      try { attachmentContent = await attachContent.buildAttachmentContext(focusMail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(focusMail) }); }
+      try { attachmentContent = await attachContent.buildAttachmentContext(focusMail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(focusMail), visionKeys: getVisionKeys() }); }
       catch (e) { attachmentContent = { text: '', chips: [] }; }
       const ask = [
         '[대상] 사용자가 지금 화면에서 열어 둔 메일 1건이다. 검색하지 말고 이 메일(과 함께 주어진 스레드 맥락)만 근거로 답하라.',

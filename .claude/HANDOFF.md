@@ -1,7 +1,10 @@
 # HANDOFF — Bmail (bonglook)
 
-## 미완료 (2026-09-28 갱신 — 1~4 완료, 5~6 대기)
-5. [ ] 첨부 내용 분석(PDF·XLSX·DOCX 텍스트 + 이미지는 무료 비전모델) — scout 정찰 후 별도 발주.
+## 미완료 (2026-09-28 갱신 — 1~5 완료, 6 대기)
+5. [x] 첨부 내용 분석(PDF·XLSX·DOCX 텍스트 + 이미지는 무료 비전모델) — 2단계 모두 구현·실DB/실API 검증
+   완료. 상세: 아래 「5번 완료 상세」 참조.
+7. [ ] 🔴 **회신대기 판정 결함** — 기존 규칙 LLM 대비 일치율 **34.4%**(40건, `scripts/jev-measure2-result.json`). 사례 #6729: 제목 정규화 매칭 실패로 회신한 스레드를 미회신 판정. 근본원인 조사 후 규칙 수정 + 후보만 LLM 재확인(원격, PC 부하 0). ← **다음 발주**
+- 6번 Jev 결론(지휘자, 2026-09-28): **Bmail 실시간 경로 미적용.** 근거 — 적용 0/4(처리상태 규칙 열세·광고 동률·주제/회신 문턱 미달), CPU 모드 Jev 15.7s > LLM 6.3s, 신규 메일량은 무료 LLM 1000회/일로 충분. 어댑터·측정도구(`src/jev.js`·`jev-server.js`·`scripts/jev-measure*.mjs`)는 보존 — GPU 유휴 시 과거 메일 야간 일괄 분류 용도. Jev 10배 후보 1순위는 wd-checker(스킬 §10-4). 마스터가 강제 적용 원하면 주제 분류 「추정」 표시로.
 6. [ ] **Jev 판정 도입** — 백엔드 결정 완료(아래 참조: JevK5 로컬 자가호스팅). 대상: 처리상태 제안 ·
    주제 분류 · 회신필요(noul) · 광고판정(noul) · 의도 라우팅 보조. 한국어 20건+ LLM 대조 일치율 실측
    후에만 본적용. OpenRouter Jev API(`/api/alpha/decisions`, `typesafe/jev-1.13`)는 이번 세션의
@@ -14,6 +17,31 @@
 - [x] ③-b **측정 전용**: Jev 어댑터(`src/jev.js`, 백엔드 교체형) + 온디맨드 서버 수명주기(`src/jev-server.js`, VRAM 확인·유휴 종료) + 4질문 × 24건 실측(`scripts/jev-measure.mjs`, §10-5 표). 앱 UI 연결 없음(고아 스캔 ERROR 0 확인).
 - [x] ③-c 측정 통과 판정만 앱 연결 — **통과 0건, 앱 연결 없음**(아래 「기준선 비교」 참조).
 - 🔴 설계 제약: 마스터는 CAD(AutoCAD·Navisworks·GstarCAD) 사용 → **JevK5 상시 구동 금지**. VRAM 5.6/6GB 점유 실측 → 기동 전 여유 VRAM 확인, 부족하면 CPU 또는 건너뜀. 마스터 기존 지시 「PC 메모리에 영향 없어야」 준수.
+
+### 5번 완료 상세 (첨부 내용 분석, 2026-09-28)
+- **1단계(문서)**: `src/attach-content.js`(신규, 단일 진입점) — 캐시(db.js attachments 테이블
+  extract_kind/pages/full_len/failed/at 컬럼) 우선, 없으면 저장본 추출, 저장본도 없으면
+  `fetchMailAttachmentsToLocal`(main.js, mail:attachFetch 와 공유)로 Outlook COM 복사(읽기만).
+  첨부당 3000자·전체 9000자 예산, 초과 시 "N자 중 M자 반영" 표시. 스캔 PDF(텍스트<20자)는
+  "텍스트 없음(스캔/도면 추정)", 미지원 형식(dwg/hwp/zip 등)은 "미지원 형식(.ext)" 정직 표시
+  (`src/attachments.js`). 연결 지점: `ai:translate`(읽기창 분석)·`ai:chatMails` focus 분기("이 메일로
+  대화")만 — 브리핑·업무일지 등 대량 경로는 제외.
+- **2단계(이미지)**: `src/attach-vision.js`(신규) — OpenRouter 무료 비전 3모델 체인(실측 1위만 안정
+  성공, 2·3위는 업스트림 429 상시라 폴백용). 전부 실패 시 "이미지 분석 불가(무료 비전 모델 응답 없음)"
+  정직 표시. PDF→이미지 렌더링은 범위 밖(canvas 의존성 제외 상태, 한계로 명시).
+- **실DB(24,232건) 확장자 분포**: pdf 323·dwg 60·xlsx 47·xls 27·png 26·docx 23·jpg 18·zip 14·msg 9·
+  hwp 3(진짜 첨부 560건 중). mails.real_attach_count 합계 23,518 인데 attachments 테이블엔 560건뿐 —
+  대다수 미저장이라 분석 시 온디맨드 확보(위 fetchMissingFn)가 핵심 경로.
+- **실API 검증**: PDF/XLSX/DOCX/HWP(미지원) 4건 + 이미지 1건(mail#4530, 엔진 호스 사진) 을
+  OpenRouter 로 실호출 — 응답이 첨부 내용(문서버전·중량표 5,058.97톤·이미지 속 모델번호 등)을
+  실제로 인용함을 확인. 토큰축소 단계에서 첨부내용을 가장 먼저 버리던 설계 버그를 실측 중
+  발견·수정(본문/스레드를 먼저 줄이고 첨부내용은 최후 수단).
+- **셀프체크**: attachments.js·attach-vision.js·attach-content.js 3종 신설, selfcheck.mjs 에 등록.
+  뮤테이션 증명 2건 완료(문서 주입 끄면 FAIL·비전 주입 끄면 FAIL, 확인 후 원복).
+- **한계**: PDF 스캔 이미지 내용 분석 불가(2단계 범위 아님). 비전 체인 3종 중 2종은 업스트림 429가
+  "상시"라 사실상 1종(nemotron-3-nano-omni) 의존 — 그 모델이 막히면 전부 실패로 정직 표시됨.
+- **빌드·설치**: `npm run dist`(fnm node) → `install-silent.mjs` → `post-install-verify.mjs` 전부 통과,
+  DB 707MB 보존 확인. 커밋 2건: 1단계(경로 한정)·2단계(경로 한정).
 
 ## 완료분 (2026-09-28)
 1. [x] 답장 초안 TypeError 수정 — `aiBoxEl()`/`aiq()` 공유 헬퍼 신설, box 보유 호출부는 `box.querySelector`.
