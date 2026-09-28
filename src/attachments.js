@@ -22,19 +22,29 @@ async function extract(filePath) {
   if (ext === '.pdf') {
     const buffer = fs.readFileSync(filePath);
     // 1차: pdf-parse (빠름). 실패 시 2차: pdfjs-dist (견고, Mozilla 공식)
+    let text = '', pages = 0;
     try {
       const pdfParse = require('pdf-parse');
       const data = await pdfParse(buffer);
       if (data && data.text && data.text.trim().length > 0) {
-        return { type: 'pdf', sizeKB, pages: data.numpages, text: truncate(data.text, 20000) };
+        text = data.text; pages = data.numpages;
+      } else {
+        throw new Error('empty text');   // 텍스트가 비면 폴백
       }
-      // 텍스트가 비면 폴백
-      throw new Error('empty text');
     } catch (e1) {
       // 2차: pdfjs-dist
-      const result = await extractPdfWithPdfjs(buffer);
-      return { type: 'pdf', sizeKB, pages: result.pages, text: truncate(result.text, 20000) };
+      try {
+        const result = await extractPdfWithPdfjs(buffer);
+        text = result.text || ''; pages = result.pages || 0;
+      } catch (e2) {
+        return { type: 'pdf', sizeKB, pages: 0, text: '', extractFailed: `PDF 추출 실패: ${String(e2.message || e2).slice(0, 200)}` };
+      }
     }
+    // 공백 제외 20자 미만이면 '텍스트가 있는 PDF'로 보기 어렵다(스캔·도면 이미지 PDF) — 지어내지 않고 정직하게 표시.
+    if (text.replace(/\s+/g, '').length < 20) {
+      return { type: 'pdf', sizeKB, pages, text: '', extractFailed: '텍스트 없음(스캔/도면 추정)' };
+    }
+    return { type: 'pdf', sizeKB, pages, text: truncate(text, 20000) };
   }
 
   // -------- 엑셀 / CSV --------
@@ -106,7 +116,8 @@ async function extract(filePath) {
   return {
     type: 'unknown',
     sizeKB,
-    text: `[지원하지 않는 형식: ${name}] 텍스트 추출을 건너뜁니다.`
+    text: '',
+    extractFailed: `미지원 형식(.${ext.replace(/^\./, '') || '?'})`
   };
 }
 
@@ -139,3 +150,52 @@ function truncate(str, max) {
 }
 
 module.exports = { extract };
+
+// ============================================================
+//  셀프체크 — `node src/attachments.js`
+//  ------------------------------------------------------------
+//  실파일 없이도 검증 가능한 것만: 텍스트/CSV 추출·truncate·미지원 형식 정직 표시.
+//  PDF 스캔 판정(20자 미만→extractFailed)은 attach-content.js 셀프체크에서 실파일로 재확인한다.
+// ============================================================
+if (require.main === module) {
+  (async () => {
+    const os = require('os');
+    const assert = require('assert');
+    let pass = 0;
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmail-att-'));
+    try {
+      // 1) 텍스트 파일
+      const txtPath = path.join(tmpDir, 'note.txt');
+      fs.writeFileSync(txtPath, '안녕하세요\n본문 내용입니다.', 'utf8');
+      const rTxt = await extract(txtPath);
+      assert.strictEqual(rTxt.type, 'text'); pass++;
+      assert.ok(rTxt.text.includes('안녕하세요')); pass++;
+
+      // 2) truncate 동작 — 20000자 넘으면 잘리고 안내문이 붙는다
+      const bigPath = path.join(tmpDir, 'big.txt');
+      fs.writeFileSync(bigPath, 'A'.repeat(25000), 'utf8');
+      const rBig = await extract(bigPath);
+      assert.ok(rBig.text.length < 25000, 'truncate 가 동작하지 않음'); pass++;
+      assert.ok(rBig.text.includes('내용이 길어'), 'truncate 안내문 누락'); pass++;
+
+      // 3) CSV — 시트/행 구조 보존
+      const csvPath = path.join(tmpDir, 'sheet.csv');
+      fs.writeFileSync(csvPath, '﻿이름,금액\n홍길동,1000\n', 'utf8');
+      const rCsv = await extract(csvPath);
+      assert.strictEqual(rCsv.type, 'excel'); pass++;
+      assert.ok(rCsv.text.includes('홍길동') && rCsv.text.includes('1000'), 'CSV 표 내용 유실'); pass++;
+
+      // 4) 미지원 형식 — 지어내지 않고 정직하게 표시(빈 텍스트 + extractFailed)
+      const dwgPath = path.join(tmpDir, 'plan.dwg');
+      fs.writeFileSync(dwgPath, 'binary-stub', 'utf8');
+      const rDwg = await extract(dwgPath);
+      assert.strictEqual(rDwg.type, 'unknown'); pass++;
+      assert.strictEqual(rDwg.text, '', '미지원 형식인데 text 를 채움(지어내기 금지 위반)'); pass++;
+      assert.ok(/미지원 형식/.test(rDwg.extractFailed), 'extractFailed 사유 누락'); pass++;
+
+      console.log(`attachments.js 셀프체크 OK — ${pass}건 통과(텍스트·truncate·CSV·미지원형식 정직표시)`);
+    } finally {
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+    }
+  })().catch((e) => { console.error('attachments.js 셀프체크 FAIL:', e.message); process.exit(1); });
+}

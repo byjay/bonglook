@@ -294,7 +294,7 @@ function isSentMail(mail) {
 //  refine: { instruction, previous } — 대화로 분석을 고칠 때 쓴다(마스터 요구: 분석 후 계속 대화).
 //  threadContext: 같은 대화(thread_key)의 이전 메일들(오래된순, 최대 N통) — mailDigest 로 압축해 넣는다.
 //  attachments: 진짜 첨부 파일명 목록([{name}]) — "무슨 도면/문서가 왔는지" 핵심정보 반영용.
-async function translateAnalyze({ keys, model, mail, refine = null, providerOverride = null, threadContext = [], attachments = [] }) {
+async function translateAnalyze({ keys, model, mail, refine = null, providerOverride = null, threadContext = [], attachments = [], attachmentContext = '' }) {
   const lang = mail.lang || 'unknown';
   const fullBody = mail.body || mail.preview || '';
   const isKo = isKoreanMail(mail);   // lang + 새 본문 기준 통합 판정
@@ -326,6 +326,9 @@ async function translateAnalyze({ keys, model, mail, refine = null, providerOver
     const attLine = attList.length
       ? `첨부(${attachments.length}건 중 ${attList.length}건 표시): ${attList.map(a => a.name || a.file_name || '').filter(Boolean).join(', ')}`
       : (attachments.length ? `첨부(${attachments.length}건, 목록 생략)` : '첨부: 없음');
+    // ★ 첨부 '내용'(PDF·XLSX/CSV·DOCX·TXT, attach-content.js 가 캐시 우선으로 만든 텍스트) —
+    //   토큰 상한 축소 단계(step.attContent===false)에서는 가장 무거운 이 블록을 먼저 빼서 재시도한다.
+    const attContentBlock = (step.attContent !== false) ? (attachmentContext || '') : '';
     return [
       {
         role: 'system',
@@ -357,6 +360,7 @@ async function translateAnalyze({ keys, model, mail, refine = null, providerOver
             ? '★ 원문이 한국어입니다. 번역은 생략하고(translated는 빈 문자열) 요약·액션·핵심정보에 집중하세요.'
             : '★ 원문이 외국어입니다. translated 에 전문 번역을 반드시 채우세요.',
           threadBlock ? '★ [이전 대화 맥락]이 함께 주어집니다. 무엇이 언제 요청됐고 어디까지 진행됐는지 흐름을 반영해 요약·미결 판단에 활용하세요.' : '',
+          attContentBlock ? '★ [첨부 내용]이 함께 주어집니다. 그 내용을 근거로 요약·keyFacts·actions 를 채우고, 첨부에 없는 사실을 지어내지 마세요. 첨부 내용을 인용할 때는 반드시 첨부 파일명을 함께 밝히세요.' : '',
           '근거가 없는 내용은 지어내지 말고, 해당 항목을 빈 배열로 두세요. 도면번호·호선번호·기한은 본문(또는 이전 맥락)에 실제로 적힌 것만 쓰세요.'
         ].filter(Boolean).join('\n')
       },
@@ -365,16 +369,20 @@ async function translateAnalyze({ keys, model, mail, refine = null, providerOver
         content: refineNote + String.fromCharCode(10) + (sent
           ? `[내가 보낸 메일]\n받는사람: ${mail.recipients || mail.to || ''}\n참조: ${mail.cc || ''}\n`
           : `발신: ${mail.sender_name || mail.sender || ''} <${mail.sender_email || mail.senderMail || ''}>\n`) +
-          `제목: ${mail.subject || ''}\n감지언어: ${LANG_NAME[lang] || lang}\n${attLine}${threadBlock}\n\n본문:\n${body}`
+          `제목: ${mail.subject || ''}\n감지언어: ${LANG_NAME[lang] || lang}\n${attLine}${threadBlock}${attContentBlock}\n\n본문:\n${body}`
       }
     ];
   }
 
-  //  축소 단계: 0=원본 → 1=스레드3통/본문300자 → 2=스레드1통/본문300자/첨부5개
+  //  축소 단계: 0=원본 → 1=스레드3통/본문300자(첨부 내용은 마스터가 원한 신호라 우선 유지) →
+  //  2=스레드1통/본문300자/첨부5개 + 첨부내용도 최후에 제거(그래도 넘치면).
+  //  ★ 실측(2026-09-28, 실DB #4): 첨부내용을 1단계에서 먼저 빼면 본문이 큰 메일은 LLM 이 첨부
+  //    내용을 전혀 못 보고도 promptReduced 배지 없이 지나갈 뻔했다 — 본문/스레드를 먼저 줄이고
+  //    첨부 내용은 최후 수단으로 미룬다(스킬 §4: 형식 보장≠정답 보장, 조용히 빠지면 안 됨).
   const steps = [
-    { threadN: threadContext.length, bodyChars: fullBody.length, threadBodyChars: 200, attMax: attachments.length },
-    { threadN: Math.min(3, threadContext.length), bodyChars: 300, threadBodyChars: 150, attMax: Math.min(10, attachments.length) },
-    { threadN: Math.min(1, threadContext.length), bodyChars: 300, threadBodyChars: 150, attMax: Math.min(5, attachments.length) }
+    { threadN: threadContext.length, bodyChars: fullBody.length, threadBodyChars: 200, attMax: attachments.length, attContent: true },
+    { threadN: Math.min(3, threadContext.length), bodyChars: 300, threadBodyChars: 150, attMax: Math.min(10, attachments.length), attContent: true },
+    { threadN: Math.min(1, threadContext.length), bodyChars: 300, threadBodyChars: 150, attMax: Math.min(5, attachments.length), attContent: false }
   ];
 
   //  providerOverride — 교차검증 2차 호출에서 '다른 제공자'로 고정 호출할 때 쓴다.

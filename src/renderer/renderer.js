@@ -2650,7 +2650,7 @@ async function sendChat() {
       const hasResultTabs = res.resultTabs && (res.mails || []).length;
       if (hasResultTabs) mirrorResultTabsFromChat(res, { switchNow: res.kind === 'tab-switch', requestedTab: res.requestedTab });
       //  해석된 조건을 칩으로 보여 준다 — 왜 이 결과가 나왔는지 사용자가 알 수 있게
-      let chipHtml = renderCondChips(res.chips, res.contextCount) + promptReducedBadge(res.promptReduced);
+      let chipHtml = renderCondChips(res.chips, res.contextCount) + promptReducedBadge(res.promptReduced) + attachmentChipsHtml(res.attachmentChips);
       if (hasResultTabs && res.kind !== 'tab-switch') {
         chipHtml += `<button class="rt-jump" type="button">${icon('list', 12)} 타임라인·표로 보기</button>`;
       }
@@ -5959,7 +5959,7 @@ async function rpTranslate() {
 
 //  분석 결과 HTML — 구조가 어긋나면 텍스트로 폴백한다
 function safeAnalysisHtml(res) {
-  const badge = crossValidationBadge(res.crossValidation) + promptReducedBadge(res.promptReduced);
+  const badge = crossValidationBadge(res.crossValidation) + promptReducedBadge(res.promptReduced) + attachmentChipsHtml(res.attachmentChips);
   if (res.structured) {
     try { return badge + renderAnalysisCard(res.structured, isKoreanMailClient(selectedMail || {})); }
     catch (e) { console.warn('분석 카드 렌더 실패 → 텍스트로 표시', e); }
@@ -5991,6 +5991,20 @@ function crossValidationBadge(cv) {
   return `<div class="cv-badge cv-warn">${icon('flag', 12)} 확인 필요 — 두 결과가 달랐습니다(${escapeHtml(cv.votes || '')})
     <button type="button" class="link-btn cv-toggle">차이 보기</button>
     <div class="cv-diffs hidden">${diffRows}</div></div>`;
+}
+
+// ============================================================
+//  「반영한 첨부」 칩 — 마스터 지시(첨부 분석 1단계): 분석·대화가 어떤 첨부 내용을
+//  얼마나 반영했는지(또는 왜 못 했는지) 조용히 삼키지 않고 보여준다.
+//  ok=true: 반영됨(초록) / ok=false: 실패·미지원(회색, 사유 노출) / ok=null: 이미지(2단계 대상, 회색)
+// ============================================================
+function attachmentChipsHtml(chips) {
+  if (!chips || !chips.length) return '';
+  const items = chips.map(c => {
+    const cls = c.ok === true ? 'ac-chip ac-ok' : 'ac-chip ac-skip';
+    return `<span class="${cls}">${icon('clip', 11)}${escapeHtml(c.name)}<i>${escapeHtml(c.note || '')}</i></span>`;
+  }).join('');
+  return `<div class="ac-chips">${items}</div>`;
 }
 
 function bindCrossValidationToggle(root) {

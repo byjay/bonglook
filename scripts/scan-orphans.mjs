@@ -125,7 +125,9 @@ add('ERROR', '렌더러 함수 고아 (정의만 있고 호출 없음)', fnOrpha
 const dbExportBlock = (F.db.match(/module\.exports\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
 const dbExports = uniq(matchAll(dbExportBlock, /(?:^|[\s,])([A-Za-z_$][\w$]*)\s*(?:,|$)/gm))
   .filter(n => !['get', 'dbPath', 'ftsEnabled'].includes(n));
-const dbConsumers = [F.main, read(join(SRC, 'sync.js')), read(join(SRC, 'analyzer.js'))].join('\n');
+//  ★ db.js 를 쓰는 모듈이 main.js/sync.js/analyzer.js 3개로 고정돼 있었다 — 새 모듈(attach-content.js
+//    등)이 db 함수를 쓰면 오탐 ERROR 가 났다(2026-09-28 실측). db.js 를 제외한 전체 src 를 소비자로 본다.
+const dbConsumers = mainSrcAll;
 add('ERROR', 'db exports 고아 (내보냈으나 사용처 없음)',
   dbExports.filter(n => !new RegExp(`db\\.${n}\\s*\\(`).test(dbConsumers)));
 

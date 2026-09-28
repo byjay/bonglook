@@ -209,6 +209,18 @@ function migrate() {
     db.exec('CREATE INDEX IF NOT EXISTS idx_attach_inline ON attachments(mail_id, is_inline)');
   } catch (_) {}
 
+  // ★ 첨부 '내용 추출' 캐시 메타 (마스터 지시: "첨부 분석 능력 탑재" 1단계)
+  //   같은 첨부(mail_id+file_name+size_kb, 이미 attachments 행이 그 단위)를 재추출하지 않기 위한
+  //   상태 컬럼. extract_at 이 채워져 있으면 '이미 시도했다'(성공이든 실패든)는 뜻 — 재추출 금지 신호.
+  try {
+    const ec = db.prepare('PRAGMA table_info(attachments)').all().map(c => c.name);
+    if (!ec.includes('extract_kind')) db.exec('ALTER TABLE attachments ADD COLUMN extract_kind TEXT');       // pdf|excel|word|text|image|unsupported|error|missing
+    if (!ec.includes('extract_pages')) db.exec('ALTER TABLE attachments ADD COLUMN extract_pages INTEGER');
+    if (!ec.includes('extract_full_len')) db.exec('ALTER TABLE attachments ADD COLUMN extract_full_len INTEGER'); // 축약 전 원본 글자수
+    if (!ec.includes('extract_failed')) db.exec('ALTER TABLE attachments ADD COLUMN extract_failed TEXT');    // 실패/미지원 사유(성공이면 NULL)
+    if (!ec.includes('extract_at')) db.exec('ALTER TABLE attachments ADD COLUMN extract_at TEXT');            // 추출 시도 일시(NULL=미시도)
+  } catch (_) {}
+
   // 즐겨찾기 출처 구분 — Outlook 탐색 창에서 가져온 항목(정본) vs 앱에서 수동 추가한 항목
   try {
     const fc = db.prepare('PRAGMA table_info(folder_favorites)').all().map(c => c.name);
@@ -598,6 +610,25 @@ function getAttachmentsByMail(mailId, { includeInline = false } = {}) {
     ? 'SELECT * FROM attachments WHERE mail_id = ? ORDER BY is_inline, id'
     : 'SELECT * FROM attachments WHERE mail_id = ? AND IFNULL(is_inline,0) = 0 ORDER BY id';
   return db.prepare(sql).all(mailId);
+}
+
+function getAttachmentById(id) {
+  return db.prepare('SELECT * FROM attachments WHERE id = ?').get(id);
+}
+
+// ------------------------------------------------------------
+//  첨부 '내용 추출' 캐시 기록 (마스터 지시: 첨부 분석 능력 탑재 1단계)
+//  ------------------------------------------------------------
+//  attach-content.js 가 호출한다. extract_at 을 채워 '재추출 금지' 신호로 쓴다.
+//  실패(스캔 PDF·미지원 형식·저장본 없음·예외)도 failed 사유를 남기고 extract_at 을 채운다
+//  — 실패를 조용히 삼키면 매번 재추출을 시도하게 되어 캐시가 의미 없어진다.
+// ------------------------------------------------------------
+function updateAttachmentExtract(id, { extracted = '', kind = '', pages = null, fullLen = null, failed = null } = {}) {
+  return db.prepare(`
+    UPDATE attachments
+    SET extracted = ?, extract_kind = ?, extract_pages = ?, extract_full_len = ?, extract_failed = ?, extract_at = datetime('now')
+    WHERE id = ?
+  `).run(String(extracted || '').slice(0, 8000), kind || '', pages || null, fullLen || null, failed || null, id).changes;
 }
 
 // ------------------------------------------------------------
@@ -2598,7 +2629,7 @@ function close() {
 module.exports = {
   init, close,
   upsertMailsBatch,
-  addAttachment, getAttachmentsByMail,
+  addAttachment, getAttachmentsByMail, getAttachmentById, updateAttachmentExtract,
   upsertContactsBatch, listContacts, upsertAddressBook, getGroupMembers, addressBookStats,
   addAnalysis, getAnalyses, listAnalyses,
   getDailyBriefing, saveDailyBriefing, dailyBriefingDates, mailsOnDate,

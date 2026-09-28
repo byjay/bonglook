@@ -1392,6 +1392,14 @@ button:where(:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.
 .cv-badge .cv-toggle{font-size:11px!important; padding:1px 4px!important;}
 .cv-diffs{width:100%; margin-top:4px; padding-top:4px; border-top:1px dashed #f3d19e;}
 .cv-diffs.hidden{display:none;}
+
+/* 「반영한 첨부」 칩 — 첨부 분석 1단계(마스터 지시). 색상은 위 .cv-badge 와 동일 팔레트 재사용
+   (이미 대비 실측 완료: 초록 4.58:1 · 주황 4.78:1 — 새 색 도입 없이 SoT 유지) */
+.ac-chips{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+.ac-chip{display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:9px; font-size:11px; line-height:1.5;}
+.ac-chip.ac-ok{background:#e6f4ea; color:#1e7d34; border:1px solid #b7e1c3;}
+.ac-chip.ac-skip{background:#fff4e5; color:#a15c00; border:1px solid #f3d19e;}
+.ac-chip i{font-style:normal; opacity:.85;}
 .cv-diff{font-size:11px; color:#a15c00;}
 
 /* 대화창이 본문을 가리지 않도록 우측 여백 확보 (창이 충분히 넓을 때만) */

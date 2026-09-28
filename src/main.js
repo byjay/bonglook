@@ -50,6 +50,7 @@ const exporter = require('./exporter');     // 통합 대시보드 HTML · 엑�
 const timelineAgg = require('./timeline-agg');   // 검색/대화 결과 4탭(타임라인/목록/사람별/키워드별) 집계
 const actionState = require('./action-state');
 const attachClassify = require('./attach-classify');   // 진짜 첨부 vs 인라인 이미지 판정
+const attachContent = require('./attach-content');      // 첨부 '내용' 추출→캐시→분석 프롬프트 주입(1단계)
 const organizeAttach = require('./attach-organize');   // 대화로 첨부 정리(계획·안전·실행)
 const aiErrors = require('./ai-errors');               // AI 실패 → 사람이 읽는 문구
 const aiProviders = require('./ai-providers');          // AI 제공자 프리셋(Cerebras/Groq/Gemini/OpenRouter/사용자지정)
@@ -1105,30 +1106,38 @@ ipcMain.handle('mail:attachMeta', async (_e, { id, force } = {}) => {
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
+//  ★ 진짜 첨부를 Outlook COM 으로 로컬에 복사(읽기만, MailItem 변경 없음)하고 DB 에 기록한다.
+//    mail:attachFetch(사용자 [가져오기] 버튼)와 attach-content.js(분석/대화 시 자동 확보)가 공유한다
+//    — 공유 함수 1곳(CLAUDE.md §G-2-5), 따로따로 구현하면 한쪽만 고쳤을 때 형제가 깨진다.
+async function fetchMailAttachmentsToLocal(mail) {
+  if (store.get('source') === 'pst') return { ok: false, error: 'PST 모드에서는 첨부를 가져올 수 없습니다.' };
+  if (!mail || !mail.entry_id) return { ok: false, error: '이 메일의 Outlook 식별자를 찾을 수 없습니다.' };
+  const day = String(mail.received_at || '').slice(0, 10) || 'unknown';
+  const dir = path.join(app.getPath('userData'), 'attachments', day, String(mail.id));
+  const res = await outlook.saveAttachmentsBatch([{ entryId: mail.entry_id, dir }]);
+  const paths = (res[0] && res[0].paths) || [];
+  if (!paths.length) return { ok: false, error: '가져올 첨부가 없습니다(본문 이미지만 있을 수 있습니다).' };
+  // 이미 기록된 파일명은 건너뛴다(중복 누적 방지)
+  const known = new Set(db.getAttachmentsByMail(mail.id, { includeInline: true }).map(a => a.file_name));
+  const saved = [];
+  for (const fp of paths) {
+    const name = path.basename(fp);
+    let sizeKB = 0;
+    try { sizeKB = Math.round(fsMain.statSync(fp).size / 1024); } catch (e) { /* noop */ }
+    if (!known.has(name)) db.addAttachment(mail.id, { fileName: name, sizeKB, savedPath: fp, isInline: false });
+    saved.push({ name, sizeKB, inline: false, savedPath: fp });
+  }
+  attachMetaCache.delete(mail.id);         // 저장했으므로 다음 조회는 DB 행을 쓴다
+  return { ok: true, saved: true, items: saved, dir };
+}
+
 //  [가져오기] — 이 메일의 진짜 첨부를 지금 로컬에 저장하고 DB 에 기록한다.
 ipcMain.handle('mail:attachFetch', async (_e, { id } = {}) => {
   try {
     requireDb();
-    if (store.get('source') === 'pst') return { ok: false, error: 'PST 모드에서는 첨부를 가져올 수 없습니다.' };
     const mail = db.getMailById(id);
-    if (!mail || !mail.entry_id) return { ok: false, error: '이 메일의 Outlook 식별자를 찾을 수 없습니다.' };
-    const day = String(mail.received_at || '').slice(0, 10) || 'unknown';
-    const dir = path.join(app.getPath('userData'), 'attachments', day, String(id));
-    const res = await outlook.saveAttachmentsBatch([{ entryId: mail.entry_id, dir }]);
-    const paths = (res[0] && res[0].paths) || [];
-    if (!paths.length) return { ok: false, error: '가져올 첨부가 없습니다(본문 이미지만 있을 수 있습니다).' };
-    // 이미 기록된 파일명은 건너뛴다(중복 누적 방지)
-    const known = new Set(db.getAttachmentsByMail(id, { includeInline: true }).map(a => a.file_name));
-    const saved = [];
-    for (const fp of paths) {
-      const name = path.basename(fp);
-      let sizeKB = 0;
-      try { sizeKB = Math.round(fsMain.statSync(fp).size / 1024); } catch (e) { /* noop */ }
-      if (!known.has(name)) db.addAttachment(id, { fileName: name, sizeKB, savedPath: fp, isInline: false });
-      saved.push({ name, sizeKB, inline: false, savedPath: fp });
-    }
-    attachMetaCache.delete(id);            // 저장했으므로 다음 조회는 DB 행을 쓴다
-    return { ok: true, saved: true, items: saved, dir };
+    if (!mail) return { ok: false, error: '메일을 찾을 수 없습니다.' };
+    return await fetchMailAttachmentsToLocal(mail);
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
@@ -2013,14 +2022,14 @@ ipcMain.handle('bigmail:historyDelete', (_e, { id }) => okWrap(() => db.deleteBi
 //  · 2차 호출 실패(429/한도 등)는 조용히 묻지 않고 배지로 표시 + 1차 결과로 폴백한다.
 //  · 불일치 시 3순위 제공자가 있으면 다수결, 없으면 '확인 필요' 배지만 표시한다.
 // ============================================================
-async function crossValidateTranslate(mail, keys, model, primary, threadContext = [], attachments = []) {
+async function crossValidateTranslate(mail, keys, model, primary, threadContext = [], attachments = [], attachmentContext = '') {
   const chain = aiUsableChain();
   if (chain.length < 2) return { enabled: false, reason: '등록된 제공자가 1개뿐입니다' };
   const second = chain[1];
   let secRes;
   try {
     secRes = await analyzer.translateAnalyze({
-      keys: second.keys, model: second.model, mail, threadContext, attachments,
+      keys: second.keys, model: second.model, mail, threadContext, attachments, attachmentContext,
       providerOverride: { chatUrl: second.chatUrl, provider: second.provider, model: second.model, keys: second.keys }
     });
   } catch (e) {
@@ -2039,7 +2048,7 @@ async function crossValidateTranslate(mail, keys, model, primary, threadContext 
     const third = chain[2];
     try {
       const thirdRes = await analyzer.translateAnalyze({
-        keys: third.keys, model: third.model, mail, threadContext, attachments,
+        keys: third.keys, model: third.model, mail, threadContext, attachments, attachmentContext,
         providerOverride: { chatUrl: third.chatUrl, provider: third.provider, model: third.model, keys: third.keys }
       });
       if (thirdRes.ok && thirdRes.structured) {
@@ -2069,17 +2078,21 @@ ipcMain.handle('ai:translate', async (_e, { id, refine } = {}) => {
     try { threadContext = db.getThreadContext(mail, threadLimit); } catch (e) { threadContext = []; }
     let attachments = [];
     try { attachments = (db.getAttachmentsByMail(id) || []).map(a => ({ name: a.file_name })); } catch (e) { attachments = []; }
-    const res = await analyzer.translateAnalyze({ keys, model: getModel(), mail, refine: refine || null, threadContext, attachments });
+    // ★ 첨부 '내용'(PDF·XLSX/CSV·DOCX·TXT) 주입 — 캐시 우선, 저장본 없으면 1회 COM 확보(읽기만).
+    let attachmentContent = { text: '', chips: [] };
+    try { attachmentContent = await attachContent.buildAttachmentContext(mail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(mail) }); }
+    catch (e) { attachmentContent = { text: '', chips: [] }; }
+    const res = await analyzer.translateAnalyze({ keys, model: getModel(), mail, refine: refine || null, threadContext, attachments, attachmentContext: attachmentContent.text });
     let crossValidation = { enabled: false };
     if (res.ok && !refine && store.get('crossValidate') !== false) {
-      try { crossValidation = await crossValidateTranslate(mail, keys, getModel(), res, threadContext, attachments); }
+      try { crossValidation = await crossValidateTranslate(mail, keys, getModel(), res, threadContext, attachments, attachmentContent.text); }
       catch (e) { crossValidation = { enabled: true, failed: true, reason: String(e.message || e) }; }
     }
     // 구조화 결과가 있으면 JSON 으로 저장 → 다시 열 때도 카드 형태로 복원된다
     if (res.ok) {
       db.addAnalysis(id, 'translate', res.structured ? JSON.stringify(res.structured) : res.content, mail.lang || '');
     }
-    return { ...res, crossValidation };
+    return { ...res, crossValidation, attachmentChips: attachmentContent.chips };
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
@@ -2285,15 +2298,21 @@ ipcMain.handle('ai:chatMails', async (_e, { question, history, context, focusMai
         ? ['', '[같은 스레드 이전 메일(오래된순)]',
            threadCtx.map((m, i) => `${i + 1}. ${m.received_at || ''} ${m.sender_name || ''} — ${String(m.subject || '')} : ${String(m.body || m.preview || '').replace(/\s+/g, ' ').slice(0, 150)}`).join('\n')].join('\n')
         : '';
+      // ★ 첨부 '내용'(PDF·XLSX/CSV·DOCX·TXT) 주입 — 캐시 우선, 저장본 없으면 1회 COM 확보(읽기만).
+      let attachmentContent = { text: '', chips: [] };
+      try { attachmentContent = await attachContent.buildAttachmentContext(focusMail, { fetchMissingFn: () => fetchMailAttachmentsToLocal(focusMail) }); }
+      catch (e) { attachmentContent = { text: '', chips: [] }; }
       const ask = [
         '[대상] 사용자가 지금 화면에서 열어 둔 메일 1건이다. 검색하지 말고 이 메일(과 함께 주어진 스레드 맥락)만 근거로 답하라.',
         '근거가 이 메일 밖으로 나가면 안 된다. 도면번호·호선번호·기한은 아래 내용에 실제로 적힌 것만 언급하라.',
+        attachmentContent.text ? '첨부 내용이 함께 주어지면 그 내용을 근거로 답하고, 첨부에 없는 사실을 지어내지 마라. 인용할 때는 첨부 파일명을 명시하라.' : '',
         '제목: ' + (focusMail.subject || ''),
         '보낸사람: ' + (focusMail.sender_name || '') + ' <' + (focusMail.sender_email || '') + '>',
         '받은시각: ' + (focusMail.received_at || ''),
         '진짜 첨부: ' + attLine,
         prior ? ('이전 분석 결과: ' + prior) : '',
         threadBlock,
+        attachmentContent.text,
         '',
         '[본문]',
         String(focusMail.body || focusMail.preview || '').slice(0, 6000),
@@ -2318,6 +2337,7 @@ ipcMain.handle('ai:chatMails', async (_e, { question, history, context, focusMai
         kind: 'focus', focusMailId: focusMail.id, contextCount: 1,
         mails: [mailBrief(focusMail)],
         chips: [{ kind: 'scope', label: '이 메일: ' + String(focusMail.subject || '').slice(0, 24) }],
+        attachmentChips: attachmentContent.chips,
         historyTurns: persisted.length, dbTotal
       });
     }
