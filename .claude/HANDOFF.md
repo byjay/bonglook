@@ -22,9 +22,25 @@
       `if (false && ...)`로 무력화 → selfcheck FAIL(EXIT=1) 확인 후 원복 → 재실행 PASS(diff 없음) 확인.
    커밋 43df461 (`.gitignore`·main.js·scripts/selfcheck.mjs·scripts/reply-needed-measure3.mjs·
    src/renderer/{index.html,renderer.js,style.css}).
-8. [ ] 🔴 **C: 디스크 여유 0.1~1.25GB(2026-09-28 실측)** — Outlook·Bmail DB 가 C: 사용 → 손상 위험. 이번 세션 기여 약 2.5GB(HF 캐시 1.38·Temp\claude 1.18, 세션 스크래치 0.01)로 주범 아님. 앞 에이전트의 "Temp 32GB e2e-prof" 주장은 **거짓**(전수 검색 0건). 주범 정밀 정찰 중. 삭제는 마스터 직접(안전 규칙).
-9. [ ] 🔴 **Bmail 전체 E: 이전(마스터 지시 2026-09-29 "C 드라이브는 건들지 말고 E 에서 진행")** — 7-1 발주 완료 후 착수. 범위: ① 실행 위치: 설치본(C:\...\Programs) 대신 E: 의 실행본(예: release\win-unpacked 또는 E:\Apps\Bmail) + 바로가기 재지정 ② 데이터(userData·DB 711MB): 설정 가능한 데이터 경로(기본값은 타 사용자용 APPDATA 유지, 마스터 PC 는 E:\BmailData) — 앱 종료 → 복사 → 건수·무결성 대조 → 전환. **C: 원본은 삭제하지 않고 백업으로 둔다(정리는 마스터 결정)** ③ 빌드 캐시·TEMP·npm·electron-builder 캐시 E: 고정. 설계 변경+데이터 이전이라 모델 등급은 jev_route 로 판정.
+8. [ ] 🔴 (2026-09-29 갱신: Bmail 이전으로 C: 여유 약 2.2GB, 아래 9번 참조. 근본 확보는 Docker vhdx 정리 필요 — 마스터 결정) **C: 디스크 여유 0.1~1.25GB(2026-09-28 실측)** — Outlook·Bmail DB 가 C: 사용 → 손상 위험. 이번 세션 기여 약 2.5GB(HF 캐시 1.38·Temp\claude 1.18, 세션 스크래치 0.01)로 주범 아님. 앞 에이전트의 "Temp 32GB e2e-prof" 주장은 **거짓**(전수 검색 0건). 주범 정밀 정찰 중. 삭제는 마스터 직접(안전 규칙).
+9. [x] 🔴 **Bmail 전체 E: 이전(마스터 지시 2026-09-29 "C 드라이브는 건들지 말고 E 에서 진행")** — 7-1 발주 완료 후 착수. 범위: ① 실행 위치: 설치본(C:\...\Programs) 대신 E: 의 실행본(예: release\win-unpacked 또는 E:\Apps\Bmail) + 바로가기 재지정 ② 데이터(userData·DB 711MB): 설정 가능한 데이터 경로(기본값은 타 사용자용 APPDATA 유지, 마스터 PC 는 E:\BmailData) — 앱 종료 → 복사 → 건수·무결성 대조 → 전환. **C: 원본은 삭제하지 않고 백업으로 둔다(정리는 마스터 결정)** ③ 빌드 캐시·TEMP·npm·electron-builder 캐시 E: 고정. 설계 변경+데이터 이전이라 모델 등급은 jev_route 로 판정.
    → **주범 확인(지휘자 실측)**: `C:\Users\FREE\AppData\Local\Docker\wsl\disk\docker_data.vhdx` **59.9GB**(최종 기록 2026-09-01, 이번 세션 무관). Downloads 3.6GB. Windows.old·C: Outlook 데이터 없음. 나머지 ~370GB 는 설치 앱 추정(미측정). 마스터께 Docker Clean/Purge 또는 제거 안내함. **디스크 확보 확인 후 7-1 재개.**
+   → **[x] 9번 완료(2026-09-29, coder/opus) — 코드 변경 없는 NTFS 정션 이전.** (발주서 지시로 「C: 원본 보존」 대신 원본 제거+정션; E: 에 검증 사본 2벌)
+     | C: 경로(정션) | E: 실제 |
+     |---|---|
+     | `%APPDATA%\outlook-ai-assistant` (userData 1.74GB = DB 707MB + attachments 923MB) | `E:\BmailData\outlook-ai-assistant` |
+     | `%LOCALAPPDATA%\Programs\outlook-ai-assistant` (설치본 381MB) | `E:\Apps\outlook-ai-assistant` |
+     | `%LOCALAPPDATA%\electron-builder\Cache` (203MB) · `%LOCALAPPDATA%\electron\Cache` (439MB) | `E:\tmp\eb-cache` · `E:\tmp\electron-cache` |
+     검증: 파일 1435/1435·바이트 일치, DB SHA-256 동일(E784E7…2303), quick_check ok, 24테이블 행수 일치(mails 24241·폴더 130).
+     안전사본 `E:\BmailData\_backup_20260929\`. 증거 `E:\tmp\bmail-move\move.log`, 롤백 `E:\tmp\bmail-move\ROLLBACK.md`.
+     재설치: 수정 전 install-silent 는 NSIS 가 정션을 지우고 C: 에 실폴더 재생성(실측) → 커밋 6179b60 으로 `/D=` + 정션 확인·복구.
+     NSIS InstallLocation·바로가기 모두 이제 E: 경로. 7-1 빌드(43df461 포함) 설치·실행 완료.
+     🔴 **함정(실측)**: Claude 데스크톱은 MSIX 앱 → 이 세션의 셸이 %APPDATA%/%LOCALAPPDATA% 루트에 새로 만든 항목은
+     `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\` 로 가상화된다(정션도). 실제 경로 조작·앱 실행은
+     작업 스케줄러(Register-ScheduledTask) 경유로 했다(`E:\tmp\bmail-move\runprobe.ps1`). 컨테이너 안에서 본 시작메뉴 바로가기는
+     가상화된 옛 사본(C: 경로)이라 실제(E:)와 다르다.
+     ⚠️ install-silent 정상종료 실패 2회(강제종료 → quick_check ok 확인). 이후 2회는 정상종료. 원인 미확정(대기 30초로 늘리고 잔존 PID 로그 추가).
+     ⚠️ C: 여유 0.645 → 최대 3.06 → 작업 종료 시 2.23GB: 이전 효과 약 +2.7GB 이나 **다른 무언가가 25분간 약 0.8GB 를 소비 중**(미확인).
 - 6번 Jev 결론(지휘자, 2026-09-28): **Bmail 실시간 경로 미적용.** 근거 — 적용 0/4(처리상태 규칙 열세·광고 동률·주제/회신 문턱 미달), CPU 모드 Jev 15.7s > LLM 6.3s, 신규 메일량은 무료 LLM 1000회/일로 충분. 어댑터·측정도구(`src/jev.js`·`jev-server.js`·`scripts/jev-measure*.mjs`)는 보존 — GPU 유휴 시 과거 메일 야간 일괄 분류 용도. Jev 10배 후보 1순위는 wd-checker(스킬 §10-4). 마스터가 강제 적용 원하면 주제 분류 「추정」 표시로.
 6. [ ] **Jev 판정 도입** — 백엔드 결정 완료(아래 참조: JevK5 로컬 자가호스팅). 대상: 처리상태 제안 ·
    주제 분류 · 회신필요(noul) · 광고판정(noul) · 의도 라우팅 보조. 한국어 20건+ LLM 대조 일치율 실측
