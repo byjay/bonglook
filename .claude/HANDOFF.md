@@ -42,6 +42,28 @@
 - 지휘자 정정: 정찰의 "4B 6GB 불가"는 bf16 기준. **GGUF Q5(~3GB)는 GPU 적재 가능성 높음 → 실측**. "다운로드 6GB"는 저장소 전체 기준 → **필요 양자화 파일 1개만** 받는다. "CPU 100ms" 는 미검증.
 - 진행: **작게 시작 — ③-a 설치·기동·한국어 사전판정(5건)** 으로 가부 먼저 확인 → 통과 시 ③-b 어댑터+20건 실측. 한국어 부적합이면 **영어 특징 상태(state)** 방식(한국어는 규칙으로 구조화 특징 추출 → 영어 state 로 Jev 판정)을 대안으로 함께 측정.
 
+## JevK5 설치·가부 사전판정 결과 (2026-09-28, ③-a 완료)
+- **설치**: `E:\models\jevk5\.venv`(uv, Python3.11, 전역 오염 없음) + `jevk5==0.3.0`(--no-deps, git+v0.3.0) +
+  llama.cpp b11223 win-cuda-12.4-x64(`E:\models\jevk5\llamacpp\bin\llama-server.exe`) +
+  `jevk5-4b-v0.3-Q5_K_M.gguf`(3.07GB, `E:\models\jevk5\models\`). `jevk5-serve`(bf16 CUDA)는 9GB 필요해
+  이 GPU엔 불가 — GGUF+llama-server 경로만 사용. `jevk5.server.py`는 GGUF 미지원(torch 강제 임포트)이라
+  스모크용 `/v1/systemone` 래퍼를 별도 작성(`E:\models\jevk5\systemone_gguf_server.py`,
+  JevK5GGUF 클라이언트 재사용 — Bmail 어댑터 아님, 이번 범위 아님).
+- **GPU/CPU**: **GPU 풀오프로드 성공**(`-ngl 99`). GTX1660S 6GB 중 5.6GB 사용, 잔여 330~500MB — 🔴 매우
+  타이트. 평소 데스크톱 점유(4.4GB, 이 세션 측정)와 겹치면 동시구동 불가 위험. 콜드 로드 73.5초(1회성).
+- **지연 실측**: 3-choice 단일질문 10회(콜드 제외) 평균 **749.87ms**, 최대 820.22ms — 정찰 기록의
+  "100ms"는 무관한 수치(OpenRouter Jev API 별도 측정)였음, 정정 완료.
+- **한국어 가부 5건**: action/reply_needed/theme × (A)한국어원문 state vs (B)영어특징추출 state.
+  (A) p≥0.70 14/15(93.3%), LLM(OpenRouter nemotron-3-ultra:free) 참고치 대비 원시일치 13/15(86.7%).
+  (B) p≥0.70 11/15(73.3%), LLM대비 11/15(73.3%) — **(B)가 (A)보다 낮음**(가설과 반대, n=5라 결론 보류).
+  🔴 README "English-only" 명시와 달리 한국어 원문 state 가 실측상 더 잘 작동 — choice-letter logit
+  판독이 한국어 의미이해보다 구조 단서(subject 코드·RE:·수신/참조 위치)에 반응하는 것으로 추정([Uncertain]).
+- **가부 판정**: **소규모 진행 가능(조건부)**. 200OK+정상 응답, 지연 허용범위, 한국어 위험신호 없음(A방식
+  93.3%). 단 VRAM 여유 330~500MB 로 OOM 위험 — 본적용 전 ① Q4_K_M(2.71GB) 교체 또는 ② 온디맨드
+  기동/언로드 구조 필요. **표본 5건은 사전판정용, 본적용 전 20건+ 정식 일치율 실측 필수**(스킬§7-4, 다음
+  발주). 서버 2개 테스트 후 종료 완료(상주 없음), VRAM 1.9GB로 원복 확인.
+
+
 ## 문서 부트스트랩 (2026-09-28)
 - `CLAUDE.md`(정체 카드) 신설, `ECOSYSTEM_START_GUIDE.md` §14 레지스트리 1줄 등록. FILEMAP.md 미생성(다음 발주에서 `_warehouse/05-scripts-build/filemap.mjs` 로 생성).
 
