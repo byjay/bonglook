@@ -20,7 +20,7 @@
       `maxBatch`(기본 50) 신설, 「판정 대기」배지(`.fu-unclassified-badge`, 대비 7.78:1) 신설.
       selfcheck 신규 3건(트리거 존재·maxBatch 존재·전체화면로딩 미사용) + **뮤테이션 증명**: 트리거 guard 를
       `if (false && ...)`로 무력화 → selfcheck FAIL(EXIT=1) 확인 후 원복 → 재실행 PASS(diff 없음) 확인.
-   커밋 6ba3378 (`.gitignore`·main.js·scripts/selfcheck.mjs·scripts/reply-needed-measure3.mjs·
+   커밋 43df461 (`.gitignore`·main.js·scripts/selfcheck.mjs·scripts/reply-needed-measure3.mjs·
    src/renderer/{index.html,renderer.js,style.css}).
 8. [ ] 🔴 **C: 디스크 여유 0.1~1.25GB(2026-09-28 실측)** — Outlook·Bmail DB 가 C: 사용 → 손상 위험. 이번 세션 기여 약 2.5GB(HF 캐시 1.38·Temp\claude 1.18, 세션 스크래치 0.01)로 주범 아님. 앞 에이전트의 "Temp 32GB e2e-prof" 주장은 **거짓**(전수 검색 0건). 주범 정밀 정찰 중. 삭제는 마스터 직접(안전 규칙).
 9. [ ] 🔴 **Bmail 전체 E: 이전(마스터 지시 2026-09-29 "C 드라이브는 건들지 말고 E 에서 진행")** — 7-1 발주 완료 후 착수. 범위: ① 실행 위치: 설치본(C:\...\Programs) 대신 E: 의 실행본(예: release\win-unpacked 또는 E:\Apps\Bmail) + 바로가기 재지정 ② 데이터(userData·DB 711MB): 설정 가능한 데이터 경로(기본값은 타 사용자용 APPDATA 유지, 마스터 PC 는 E:\BmailData) — 앱 종료 → 복사 → 건수·무결성 대조 → 전환. **C: 원본은 삭제하지 않고 백업으로 둔다(정리는 마스터 결정)** ③ 빌드 캐시·TEMP·npm·electron-builder 캐시 E: 고정. 설계 변경+데이터 이전이라 모델 등급은 jev_route 로 판정.
