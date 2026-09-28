@@ -3,7 +3,10 @@
 ## 미완료 (2026-09-28 갱신 — 1~5 완료, 6 대기)
 5. [x] 첨부 내용 분석(PDF·XLSX·DOCX 텍스트 + 이미지는 무료 비전모델) — 2단계 모두 구현·실DB/실API 검증
    완료. 상세: 아래 「5번 완료 상세」 참조.
-7. [ ] 🔴 **회신대기 판정 결함** — 기존 규칙 LLM 대비 일치율 **34.4%**(40건, `scripts/jev-measure2-result.json`). 사례 #6729: 제목 정규화 매칭 실패로 회신한 스레드를 미회신 판정. 근본원인 조사 후 규칙 수정 + 후보만 LLM 재확인(원격, PC 부하 0). ← **다음 발주**
+7. [x] **회신 필요성(의미) 판정 층 추가 완료(2026-09-28)** — HANDOFF 이전 기록("#6729 제목 정규화 매칭 실패")은
+   **틀렸다**(지휘자 직접 재현으로 정정). 진짜 원인: 기존 unansweredMails() 는 "내가 답장했는가"(사실)만 보고
+   "회신이 필요한가"(의미)는 안 본다 — 수정통보·참고도면처럼 답이 필요 없는 메일도 미회신으로 쌓인다.
+   상세: 아래 「7번 완료 상세」 참조.
 - 6번 Jev 결론(지휘자, 2026-09-28): **Bmail 실시간 경로 미적용.** 근거 — 적용 0/4(처리상태 규칙 열세·광고 동률·주제/회신 문턱 미달), CPU 모드 Jev 15.7s > LLM 6.3s, 신규 메일량은 무료 LLM 1000회/일로 충분. 어댑터·측정도구(`src/jev.js`·`jev-server.js`·`scripts/jev-measure*.mjs`)는 보존 — GPU 유휴 시 과거 메일 야간 일괄 분류 용도. Jev 10배 후보 1순위는 wd-checker(스킬 §10-4). 마스터가 강제 적용 원하면 주제 분류 「추정」 표시로.
 6. [ ] **Jev 판정 도입** — 백엔드 결정 완료(아래 참조: JevK5 로컬 자가호스팅). 대상: 처리상태 제안 ·
    주제 분류 · 회신필요(noul) · 광고판정(noul) · 의도 라우팅 보조. 한국어 20건+ LLM 대조 일치율 실측
@@ -11,6 +14,75 @@
    freeOnly 가드가 막지 않도록 경로가 이미 분리돼 있음을 확인(가드는 `cerebras.chatOnce`의
    `/chat/completions` 전용, Jev 경로는 별개) — 단 마스터가 (B) JevK5 로컬을 택했으므로 OpenRouter
    Jev API 자체는 안 쓴다(잔액 음수 방지). 키 저장 위치는 `apiKeysByProvider.openrouter` 1곳(SoT).
+
+### 7번 완료 상세 (회신 필요성 판정 층, 2026-09-28)
+- **신규 파일**: `src/reply-needed.js`(단일 책임 — LLM 1건 1호출 판정 + `bucketOf()` SoT 버킷 함수).
+- **DB**: `mails` 테이블에 `reply_needed`·`reply_needed_confidence`·`reply_needed_reason`·`reply_needed_source`
+  (`'llm'|'manual'`)·`reply_needed_at` 5컬럼 추가(`db.js migrate()`). `unansweredMails()` 가 각 행에
+  `replyBucket`('needed'|'notneeded')·`replyUncertain`·`replyManual`·`replyUnclassified` 를 붙여 반환
+  (SoT: `reply-needed.js bucketOf()` 하나에서만 파생 — 화면·대시보드·브리핑이 각자 계산 안 함).
+  `db.setReplyNeeded(id, {...})` 신설 — **manual 이 항상 우선, source='llm' 로는 이미 manual 인 행을 절대
+  덮지 않는다**(먼저 조회 후 skip).
+- **IPC**: `reply:classifyBatch`(미분류 후보만 LLM 배치 판정, main.js) · `reply:setManual`(마스터 수동 재지정).
+  `preload.js` 에 `replyClassifyBatch`·`replySetManual` 노출.
+- **판정 프롬프트**: 무료 LLM `mode:'batch'`(Groq 우선) 1건 1호출, JSON `{needs_reply, confidence, reason}`.
+  기준: To+질문/요청/기한/확인=true, CC-only·통보·자료송부·광고=false. `confidence<0.70` 은 「필요」쪽에
+  두고 `replyUncertain` 배지(놓치는 쪽보다 과잉이 안전, 스킬 §4).
+- 🔴 **실사고 발견·수정**: 초기 `maxTokens:400` 으로 실측 중 JSON 절단(`#138971` 등, RECON 2026-09-28
+  "OpenRouter LLM 200 maxTokens 함정"과 동일 클래스) → **900 으로 수정**, 재측정 0/40 실패로 해결.
+- **UI**: `renderer.js loadFollowup()` — 「회신 필요 N」(펼침)/「회신 불필요로 판단 M」(접힘, 이유 표시) 2단
+  분리. 항목별 `✕`(불필요로 옮기기)/`↩`(필요로 옮기기) 버튼 → `reply:setManual` 즉시 호출 후 새로고침.
+  대시보드 위젯(`loadUnanswered`)·브리핑 카운트(`main.js buildTodoDigest`)도 같은 `replyBucket` SoT로 연동.
+  미분류 후보가 있으면 화면 로드 후 백그라운드로 `reply:classifyBatch` 자동 호출(초기 1회+신규 증분,
+  사용자 조작 방해 없음). CSS 신규 규칙 4종 전부 대비 ≥5.7:1 확인(계산 근거: 본문 기록).
+- **Jev 미적용 사유**(스킬 §4, 코드 주석): reply_needed Jev 실측 78.3% 일치율·37.5% 폴백(40건, RECON
+  2026-09-28) — 90%/폴백 문턱 미달 → LLM 사용.
+- **실측(readonly, 마스터 실DB, 쓰기 없음 — 앱 DB 동시 접근 위험 회피)**: UI 기본값(3일+, 30일 창) 실
+  후보 **141건**. 그중 **40건**을 실제 무료 LLM(Groq/OpenRouter 실전 배치 체인) 1건 1호출로 실측:
+  성공 40/40(0 실패) · **회신 필요 6건(15%)** · **불필요로 판단 34건(85%)** · 판단불확실(conf<0.70) 0건.
+  #6729("8310 ISS 수정", 삼호 백업, 2025-05-15)는 30일 창 밖이라 실제 화면 후보엔 안 잡히지만(이 예시가
+  이번 발주의 「결함」 근거였음), `classifyMail()` 직접 호출로 실측: **needsReply=false, conf=0.97,
+  bucket='notneeded'**, reason="단순 송부 알림이며 질문·요청·기한·확인 요구가 없음" — RECON 의 LLM 기준
+  라벨(false)과 일치.
+- **불필요로 판단된 무작위 20건**(표본, 제목·발신·신뢰도·이유):
+
+| # | 제목 | 발신 | conf | 이유 |
+|---|---|---|---|---|
+| 138971 | RE: 6,603톤급 친환경 실습선 건조 생산설계 견적 요청 | 이선우 | 0.92 | 배관 견적 자료를 '참조 바랍니다'라고 단순 송부, 질문·요청·기한·확인 요구 없음 |
+| 138985 | RE: plot요청 | 고영관 | 0.85 | 단순 전달/공유만, 구체적 행동·회신·기한 요구 없음 |
+| 139085 | 한국야나세 KYTS-1037 배전반·전장품 WEIGHT 송부건 | MNC기술영업부 | 0.95 | 참조(CC), 질문·요청·기한·확인 요구 없음 |
+| 138982 | FW: KAR [2nd] GA 도면 사도 문의 건 | 고영관 | 0.85 | 첨부 참조 요청만, 직접 질문·기한·액션 없음 |
+| 139077 | [22K FD]선실(ACCOMM. PART) 도면 출도건(REVISION) | 고재이 | 0.80 | 도면 송부·출도 요청, 단순 작업지시 성격 |
+| 139143 | [RE][2710/2711] 철의 제작도 송부 건 | 김정인 | 0.95 | 단순 도면 재송부, 참조 수신, 요청·질문·기한 없음 |
+| 139071 | KYTS-1037(22K) DECK MACH. HYD. OIL LINE NO. 부여 건 | (주)태정엔지니어링 | 0.90 | 참조(CC), 요청 대상은 주수신인(고영관 대표) |
+| 138974 | 신규 수주통보서 배부 | 김미나 | 0.95 | 전사 공지성 단순 안내, 질문·요청·기한·확인 없음 |
+| 139086 | 한국야나세 KYTS-1037 BACC 무게 정보 알림의 건 | MNC설계부 | 0.95 | 단순 정보 전달, 질문·요청 없음 |
+| 139142 | [2710/2711] 철의 체결재 전달 건 | 김정인 | 0.95 | CC, 수신자(TO)에게만 확인 요청, 나는 회신 불필요 |
+| 139068 | KYTS1037-DG ROOM/AUX.MACH.ROOM/HPU ROOM ARRT 도면 반영 건 | (주)태정엔지니어링 | 0.95 | 참조(CC), 업무 참고 요청만 |
+| 139074 | [RE]22K FD - Freeboard Mark 문의 | 박붕근 | 0.95 | 정보 전달("업무에 참고 바랍니다"), 회신·액션 요청 없음 |
+| 139073 | RE: 22K FD(KYTS-1037) SHORE POWER CONNECTION 확인 | 박규진 | 0.92 | 참조(CC), 요청 대상은 강동찬 차장(동국) |
+| 138976 | RE: 22,000TLC Caisson FD draft/deflection DATA전달 | 박규진 | 0.95 | 참조, 행동 요청은 주수신자(박찬우 팀장)에게 |
+| 139082 | RE: [RE]22K FD] 선장 도면 출도 건_260914 | 고영관 | 0.85 | 전체수신 자료공유, 직접 질문·요청·기한·확인 없음 |
+| 139011 | [한라ENS_CGO NURIBARAM] 철의 자료 송부 건 | 김정인 | 0.95 | 참조(CC), 직접 질문·요청 없음 |
+| 138979 | FW: 35K FD - Electric Principle Diagram | 고영관 | 0.90 | 단순 자료 전달(참고용), 회신 요청 없음 |
+| 139079 | RE: [(주)엠앤씨이엔지] 한국야나세 KYTS-1037 BACC 재승인도면 상 COMMENT 전달 | 박규진 | 0.86 | 참조로만 수신, 직접 질문·요청·확인 없음 |
+| 138983 | HMT-2501 ANTENNA ARR'T-MAKER 검토 자료 송부의 건 | 김영기 | 0.95 | 단순 자료 송부·참고 요청, 회신 불필요 |
+| 139078 | [22K FD] Deck machinery onboard test procedure | 김정인 | 0.95 | 참조(CC), 요청은 주수신자(박진수 매니저)에게 향함 |
+
+- **검증**: selfcheck 15개 모듈 전부 PASS(reply-needed.js 11건 포함) · 고아 스캔 ERROR 0(WARN 1건은
+  기존 무관 항목 `todo-reading-pane`) · 키 하드코딩 grep 0건 · **뮤테이션 증명**: `bucketOf()` 를 항상
+  `'needed'` 만 반환하도록(판정 층 비활성화) 임시 변조 → selfcheck FAIL(AssertionError) 확인 후 원복,
+  원복 후 재실행 PASS 재확인(diff 없음 확인). 빌드(`node_modules/electron-builder`, fnm node) →
+  `install-silent.mjs` → `post-install-verify.mjs` 전부 PASS, DB 707MB 보존 확인. 2회 빌드(초기 +
+  maxTokens 버그 수정 후 재빌드) 모두 성공.
+- **UI 캡처**: 이 세션에 컴퓨터 사용/스크린샷 도구가 없어 **불가** — 코드 정적 검증(대비 계산)·selfcheck
+  뮤테이션 증명·실DB 실측(위 40건)으로 대체함을 정직히 표기.
+- **환경 문제(내 변경과 무관, 발견 즉시 대응)**: 세션 중 **C: 드라이브가 0바이트까지 참** — 내가 만든
+  실측용 DB 복사본(741MB, `vscratch/`)이 원인의 일부였음 → **즉시 삭제해 회수**, 이후 readonly 전용
+  스크립트로 전환(쓰기 없음). 빌드 시점엔 600MB대 여유로 성공했으나 마스터 PC 의 C: 드라이브가 상시
+  100% 사용 중(`C:\Users\FREE\AppData\Local\Temp` 에 32GB 의 오래된 `e2e-prof-*` 잔여 폴더 존재) —
+  이번 세션 원인이 아니고 삭제 권한도 없어 손대지 않았지만, 다음 빌드가 실패할 수 있는 **상시 위험**이라
+  마스터 확인 필요.
 
 ### 6번 세부 진행 (지휘자, 2026-09-28)
 - [x] ③-a 설치·기동·한국어 사전판정 — 조건부 진행(한국어 원문 state 가 영어특징보다 우수, n=5)

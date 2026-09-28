@@ -10,6 +10,7 @@ const path = require('path');
 const fs = require('fs');
 const sched = require('./schedules');   // 일정 추출 엔진(순수 함수)
 const attachClassify = require('./attach-classify');  // 진짜 첨부 vs 인라인 이미지 판정
+const replyNeeded = require('./reply-needed');   // 회신 필요성 버킷 SoT(bucketOf)
 
 let Database = null;
 let db = null;
@@ -298,6 +299,19 @@ function migrate() {
     if (!mc4.includes('action_source')) db.exec('ALTER TABLE mails ADD COLUMN action_source TEXT');
     db.exec('CREATE INDEX IF NOT EXISTS idx_mails_action ON mails(action_state)');
     db.exec('CREATE INDEX IF NOT EXISTS idx_mails_action_due ON mails(action_due)');
+  } catch (_) {}
+
+  // ★ 회신 필요성 판정 캐시(2026-09-28) — "내가 답장했는가"(unansweredMails, 사실)와
+  //   별개로 "회신이 필요한가"(의미)를 무료 LLM 1건 1호출로 가린 결과를 저장한다.
+  //   source: 'llm'(자동 판정) | 'manual'(마스터가 직접 재지정 · manual 이 항상 우선, 재판정이 안 덮음).
+  try {
+    const mc5 = db.prepare('PRAGMA table_info(mails)').all().map(c => c.name);
+    if (!mc5.includes('reply_needed')) db.exec('ALTER TABLE mails ADD COLUMN reply_needed INTEGER');
+    if (!mc5.includes('reply_needed_confidence')) db.exec('ALTER TABLE mails ADD COLUMN reply_needed_confidence REAL');
+    if (!mc5.includes('reply_needed_reason')) db.exec('ALTER TABLE mails ADD COLUMN reply_needed_reason TEXT');
+    if (!mc5.includes('reply_needed_source')) db.exec('ALTER TABLE mails ADD COLUMN reply_needed_source TEXT');
+    if (!mc5.includes('reply_needed_at')) db.exec('ALTER TABLE mails ADD COLUMN reply_needed_at TEXT');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_mails_reply_needed ON mails(reply_needed_source)');
   } catch (_) {}
 
   // 범주 마스터(이름·색) — Outlook Namespace.Categories 미러
@@ -1812,7 +1826,8 @@ function unansweredMails({ days = 14, limit = 30, minDays = 1, senderQuery = '',
 
   const received = db.prepare(`
     SELECT id, subject, sender_name, sender_email, received_at, received_ts, folder, has_attach, preview,
-           action_state, action_note, action_due, categories, importance, flag_status, task_due, to_me
+           action_state, action_note, action_due, categories, importance, flag_status, task_due, to_me,
+           reply_needed, reply_needed_confidence, reply_needed_reason, reply_needed_source, reply_needed_at
     FROM mails
     WHERE folder != 'Sent' AND received_ts >= ?
     ORDER BY received_ts DESC
@@ -1854,7 +1869,31 @@ function unansweredMails({ days = 14, limit = 30, minDays = 1, senderQuery = '',
   //   (limit 을 걸기 전에 정렬해야 '상한에 걸려 최신 건이 잘리는' 역전이 생기지 않는다)
   if (sort === 'waiting') out.sort((a, b) => (a.received_ts || 0) - (b.received_ts || 0));
   else out.sort((a, b) => (b.received_ts || 0) - (a.received_ts || 0));
-  return out.slice(0, limit);
+  const limited = out.slice(0, limit);
+  // ★ "회신 필요" 최종 버킷은 reply-needed.js bucketOf() 하나에서만 파생(SoT) — 화면·대시보드·
+  //   브리핑이 각자 계산하면 반드시 갈라진다. 여기서 한 번 붙여서 내려보낸다.
+  for (const m of limited) {
+    const b = replyNeeded.bucketOf(m);
+    m.replyBucket = b.bucket; m.replyUncertain = b.uncertain; m.replyManual = b.manual; m.replyUnclassified = b.unclassified;
+  }
+  return limited;
+}
+
+// ------------------------------------------------------------
+//  회신 필요성 판정 저장 (LLM 자동 판정 또는 마스터 수동 재지정)
+//   🔴 manual 이 항상 우선 — source='llm' 로는 이미 manual 인 행을 절대 덮지 않는다.
+// ------------------------------------------------------------
+function setReplyNeeded(mailId, { needsReply, confidence = null, reason = '', source = 'llm' } = {}) {
+  const id = parseInt(mailId, 10);
+  if (!Number.isFinite(id)) return { ok: false, error: '잘못된 mailId' };
+  if (source === 'llm') {
+    const cur = db.prepare('SELECT reply_needed_source FROM mails WHERE id = ?').get(id);
+    if (cur && cur.reply_needed_source === 'manual') return { ok: true, skipped: true, reason: 'manual 우선(덮지 않음)' };
+  }
+  db.prepare(`UPDATE mails SET reply_needed = ?, reply_needed_confidence = ?, reply_needed_reason = ?,
+      reply_needed_source = ?, reply_needed_at = datetime('now') WHERE id = ?`)
+    .run(needsReply ? 1 : 0, confidence, String(reason || '').slice(0, 300), source, id);
+  return { ok: true };
 }
 
 // ============================================================
@@ -2635,7 +2674,7 @@ module.exports = {
   getDailyBriefing, saveDailyBriefing, dailyBriefingDates, mailsOnDate,
   searchMails, getMailById, getMailByEntryId, mailsInRange,
   getThreadContext, findContactCandidates, saveChatTurn, getChatHistory, clearChatHistory,
-  myAddresses, myDisplayNames, backfillToMe, toMeStats, unansweredMails,
+  myAddresses, myDisplayNames, backfillToMe, toMeStats, unansweredMails, setReplyNeeded,
   // 프로젝트 사전 / 보낸메일 트리
   listProjectRules, addProjectRule, removeProjectRule, recomputeProjects,
   sentProjectTree, sentAxisRows, sentMails, setMailProject, projectList,

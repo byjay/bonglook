@@ -790,6 +790,16 @@ button:where(:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.
   border:1px solid var(--border); border-radius:5px; background:#ffffff; color:var(--text);}
 .fu-btn-sm:hover{background:#cce4f7; border-color:#0078d4;}
 
+/* ---- 회신 필요성(의미) 판정 층 — 2026-09-28 ---- */
+.fu-uncertain-badge{display:inline-block; font-size:10px; font-weight:700; color:#7a4a00;
+  background:#ffe9b3; border-radius:8px; padding:1px 7px; margin-left:6px; vertical-align:middle;}
+.fu-reason{font-size:11px; color:#5a5a58; background:#f3f2f1; border-radius:4px; padding:3px 7px; margin-top:2px;}
+.fu-notneeded-toggle{cursor:pointer; font-size:12px; font-weight:600; color:var(--muted);
+  background:#f3f2f1; border:1px solid var(--border); border-radius:6px; padding:7px 12px; margin-top:4px;}
+.fu-notneeded-toggle:hover{background:#e8e6e4;}
+.fu-notneeded-group{display:flex; flex-direction:column; gap:6px; margin-top:6px;}
+.fu-notneeded-group.hidden{display:none;}
+
 /* ---- 버튼 아이콘 정렬 (헬퍼 주입) ---- */
 .has-ico{display:inline-flex; align-items:center; gap:6px;}
 .rb-btn.has-ico{flex-direction:column; gap:3px;}

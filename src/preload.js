@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('api', {
   chatHistory: (id) => ipcRenderer.invoke('chat:history', { id }),
   chatHistoryClear: (id) => ipcRenderer.invoke('chat:historyClear', { id }),
   dbUnanswered: (opts) => ipcRenderer.invoke('db:unanswered', opts || {}),
+  replyClassifyBatch: (opts) => ipcRenderer.invoke('reply:classifyBatch', opts || {}),
+  replySetManual: (id, needsReply) => ipcRenderer.invoke('reply:setManual', { id, needsReply }),
 
   // === 로컬 가상 폴더 / 즐겨찾기 / 읽음 (Outlook 원본 불변) ===
   vfList: () => ipcRenderer.invoke('vf:list'),

@@ -1496,36 +1496,76 @@ async function loadFollowup() {
 
     followupCache = mails;              // [엑셀] 버튼이 지금 보이는 목록 그대로 내보내도록
     const total = $('#fu-total'), cnt = $('#cnt-followup');
-    if (total) total.textContent = mails.length;
-    if (cnt) cnt.textContent = mails.length;
     if (!mails.length) {
+      if (total) total.textContent = 0;
+      if (cnt) cnt.textContent = 0;
       box.innerHTML = `<div class="empty">최근 30일 안에 ${followupMinDays}일 이상 회신 대기 중인 메일이 없습니다.${senderQuery ? ' (검색: ' + escapeHtml(senderQuery) + ')' : ''}</div>`;
       return;
     }
+    // ★ 회신 필요성(의미) 버킷으로 화면을 나눈다 — SoT: db.unansweredMails() 가 붙여 준 replyBucket
+    //   (reply-needed.js bucketOf() 파생). Outlook 깃발만으로 들어온 항목은 버킷이 없어 '필요'로 본다
+    //   (명시적 후속작업 표시라 안전 쪽 기본값과 동일하게 취급).
+    const needed = mails.filter(m => (m.replyBucket || 'needed') !== 'notneeded');
+    const notNeeded = mails.filter(m => (m.replyBucket || 'needed') === 'notneeded');
+    if (total) total.textContent = needed.length;
+    if (cnt) cnt.textContent = needed.length;
+
     // 그룹 헤더는 정렬 기준을 따른다 — 날짜순이면 날짜 그룹(최신 위), 대기순이면 경과일 구간
     const bucketWait = (d) => d >= 14 ? '14일 이상 방치' : (d >= 7 ? '7~13일' : (d >= 3 ? '3~6일' : `${followupMinDays}~2일`));
-    let last = null, html = '';
-    for (const m of mails) {
-      const b = followupSort === 'waiting' ? bucketWait(m.daysWaiting) : dateGroup(m.received_at);
-      if (b !== last) { last = b; html += `<div class="date-group"><span class="dg-name">${escapeHtml(b)}</span></div>`; }
-      html += `<button class="fu-item" data-mid="${m.id}">
-          <span class="fu-days ${m.daysWaiting >= 14 ? 'fu-hot' : ''}">${m.daysWaiting}일</span>
-          <span class="fu-main">
-            <span class="fu-subject">${importanceMarker(m)}${categoryDots(m)}${escapeHtml(m.subject || '(제목 없음)')}${actionBadge(m)}</span>
-            <span class="fu-meta"><span class="fu-src">${escapeHtml(m.fuSource || '미회신')}</span>${escapeHtml(m.sender_name || m.sender_email || '')} · ${escapeHtml(m.received_at || '')} · ${escapeHtml(m.folder || '')}${m.has_attach ? ' · 첨부' : ''}${m.task_due ? ' · 기한 ' + escapeHtml(m.task_due) : ''}</span>
-            <span class="fu-prev">${escapeHtml((m.preview || '').replace(/\s+/g, ' ').slice(0, 110))}</span>
-          </span>
-          <span class="fu-actions">
-            <span class="fu-btn-sm" data-act="open" title="메일 열기">${icon('mailSearch', 13)}</span>
-            <span class="fu-btn-sm" data-act="reply" title="Outlook 답장 열기">${icon('reply', 13)}</span>
-          </span>
-        </button>`;
+    function renderItems(list) {
+      let last = null, html = '';
+      for (const m of list) {
+        const b = followupSort === 'waiting' ? bucketWait(m.daysWaiting) : dateGroup(m.received_at);
+        if (b !== last) { last = b; html += `<div class="date-group"><span class="dg-name">${escapeHtml(b)}</span></div>`; }
+        const isNotNeeded = (m.replyBucket || 'needed') === 'notneeded';
+        const reassignAct = isNotNeeded ? 'markNeeded' : 'markNotNeeded';
+        const reassignTitle = isNotNeeded ? '회신 필요로 옮기기' : '회신 불필요로 옮기기';
+        html += `<button class="fu-item" data-mid="${m.id}">
+            <span class="fu-days ${m.daysWaiting >= 14 ? 'fu-hot' : ''}">${m.daysWaiting}일</span>
+            <span class="fu-main">
+              <span class="fu-subject">${importanceMarker(m)}${categoryDots(m)}${escapeHtml(m.subject || '(제목 없음)')}${actionBadge(m)}${m.replyUncertain ? ' <span class="fu-uncertain-badge" title="LLM 판단 불확실(신뢰도 낮음) — 안전을 위해 필요 쪽에 둠">판단 불확실</span>' : ''}</span>
+              <span class="fu-meta"><span class="fu-src">${escapeHtml(m.fuSource || '미회신')}</span>${escapeHtml(m.sender_name || m.sender_email || '')} · ${escapeHtml(m.received_at || '')} · ${escapeHtml(m.folder || '')}${m.has_attach ? ' · 첨부' : ''}${m.task_due ? ' · 기한 ' + escapeHtml(m.task_due) : ''}</span>
+              <span class="fu-prev">${escapeHtml((m.preview || '').replace(/\s+/g, ' ').slice(0, 110))}</span>
+              ${isNotNeeded && m.reply_needed_reason ? `<span class="fu-reason">불필요 이유: ${escapeHtml(m.reply_needed_reason)}${m.replyManual ? ' (수동 지정)' : ''}</span>` : ''}
+            </span>
+            <span class="fu-actions">
+              <span class="fu-btn-sm" data-act="open" title="메일 열기">${icon('mailSearch', 13)}</span>
+              <span class="fu-btn-sm" data-act="reply" title="Outlook 답장 열기">${icon('reply', 13)}</span>
+              <span class="fu-btn-sm" data-act="${reassignAct}" title="${reassignTitle}">${isNotNeeded ? '↩' : '✕'}</span>
+            </span>
+          </button>`;
+      }
+      return html;
     }
+
+    let html = renderItems(needed);
+    if (notNeeded.length) {
+      html += `<div class="fu-notneeded-toggle" id="fu-notneeded-toggle">
+          <span>▸ 회신 불필요로 판단 <b>${notNeeded.length}</b>건 (펼치기)</span>
+        </div>
+        <div class="fu-notneeded-group hidden" id="fu-notneeded-group">${renderItems(notNeeded)}</div>`;
+    }
+    if (!needed.length) html = `<div class="empty">회신 필요로 판단된 메일이 없습니다.</div>` + html;
     box.innerHTML = html;
+
+    const toggle = $('#fu-notneeded-toggle');
+    if (toggle) toggle.addEventListener('click', () => {
+      const grp = $('#fu-notneeded-group');
+      const collapsed = grp.classList.toggle('hidden');
+      toggle.querySelector('span').textContent = `${collapsed ? '▸' : '▾'} 회신 불필요로 판단 ${notNeeded.length}건 (${collapsed ? '펼치기' : '접기'})`;
+    });
+
     box.querySelectorAll('.fu-item').forEach(b => {
       const id = parseInt(b.dataset.mid, 10);
       b.addEventListener('click', async (e) => {
         const act = e.target.closest('[data-act]');
+        if (act && (act.dataset.act === 'markNeeded' || act.dataset.act === 'markNotNeeded')) {
+          e.stopPropagation();
+          const needsReply = act.dataset.act === 'markNeeded';
+          await window.api.replySetManual(id, needsReply);
+          await loadFollowup();
+          return;
+        }
         if (act && act.dataset.act === 'reply') {
           e.stopPropagation();
           const r = await window.api.dbGetMail(id);
@@ -1539,6 +1579,14 @@ async function loadFollowup() {
         await openMailDetail({ id });
       });
     });
+
+    // ★ 회신 필요성 미분류 후보를 백그라운드로 채운다(초기 1회 + 신규 후보 증분 — 재판정 없음).
+    //   결과가 생기면 목록만 조용히 새로고침한다(사용자 조작 방해 없음).
+    if (mails.some(m => m.replyUnclassified)) {
+      window.api.replyClassifyBatch({ days: 30, limit: 200, minDays: followupMinDays })
+        .then(r => { if (r && r.ok && r.classified > 0 && $('#view-followup') && $('#view-followup').classList.contains('active')) loadFollowup(); })
+        .catch(() => {});
+    }
   } catch (err) {
     box.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
   }
@@ -4423,10 +4471,11 @@ async function loadUnanswered() {
   try {
     const res = await window.api.dbUnanswered({ days: 14, limit: 20, minDays: 1 });
     if (!res.ok) { box.innerHTML = `<div class="empty-sm">${escapeHtml(res.error)}</div>`; return; }
-    const mails = res.mails || [];
+    // ★ SoT: replyBucket(reply-needed.js bucketOf() 파생) 기준으로 "회신 필요"만 위젯에 보여준다.
+    const mails = (res.mails || []).filter(m => (m.replyBucket || 'needed') !== 'notneeded');
     const badge = $('#unanswered-count');
     if (badge) badge.textContent = mails.length;
-    if (!mails.length) { box.innerHTML = '<div class="empty-sm">최근 14일 내 미회신 메일이 없습니다.</div>'; return; }
+    if (!mails.length) { box.innerHTML = '<div class="empty-sm">최근 14일 내 회신 필요한 메일이 없습니다.</div>'; return; }
     box.innerHTML = mails.map(m => `
       <button class="unans-item" data-mid="${m.id}">
         <span class="ua-days">${m.daysWaiting}일</span>

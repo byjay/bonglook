@@ -55,6 +55,7 @@ const organizeAttach = require('./attach-organize');   // 대화로 첨부 정�
 const aiErrors = require('./ai-errors');               // AI 실패 → 사람이 읽는 문구
 const aiProviders = require('./ai-providers');          // AI 제공자 프리셋(Cerebras/Groq/Gemini/OpenRouter/사용자지정)
 const sentAxis = require('./sent-axis');   // 보낸메일 분류 축(날짜별·이벤트별) 순수 집계 // 메일별 내 처리 상태(할일/보류/처리/확인) 정의·자동제안
+const replyNeeded = require('./reply-needed');   // 회신 필요성(의미) LLM 판정층 — 기존 미회신(사실) 후보 위에 얹는다
 
 // ============================================================
 //  ★ 데이터 경로 고정 (절대 변경 금지)
@@ -1339,6 +1340,58 @@ ipcMain.handle('db:unanswered', (_e, opts) => {
   } catch (e) { return { ok: false, error: String(e.message || e) }; }
 });
 
+// --- 회신 필요성(의미) 판정 — 기존 미회신 후보 중 판정 안 된 것만 LLM 1건 1호출로 채운다 ---
+//    초기 1회 + 이후 신규 후보만 증분(reply_needed_source IS NULL 인 것만 대상 — 재판정 금지).
+ipcMain.handle('reply:classifyBatch', async (_e, opts) => {
+  try {
+    requireDb();
+    const keys = getKeys();
+    if (!keys.length) return { ok: false, error: 'API 키가 설정되지 않았습니다.' };
+    const o = opts || {};
+    const cand = db.unansweredMails({
+      days: o.days || 30, limit: o.limit || 200, minDays: o.minDays === undefined ? 1 : o.minDays,
+      sort: 'date', excludeClosed: true
+    });
+    const targets = cand.filter(m => m.replyUnclassified);
+    if (!targets.length) return { ok: true, classified: 0, total: 0 };
+
+    const items = targets.map(t => {
+      const full = db.getMailById(t.id) || t;
+      let threadPrev = '';
+      try {
+        const ctx = db.getThreadContext(full, 1);
+        if (ctx.length) threadPrev = String(ctx[ctx.length - 1].body || ctx[ctx.length - 1].preview || '').replace(/\s+/g, ' ').slice(0, 400);
+      } catch (_) {}
+      let attachNames = [];
+      try { attachNames = (db.getAttachmentsByMail(t.id) || []).map(a => a.file_name).filter(Boolean); } catch (_) {}
+      return { mail: full, threadPrev, attachNames };
+    });
+
+    const model = getModel();
+    const onProgress = aiProgress('replyNeeded');
+    const results = await replyNeeded.classifyBatch(items, {
+      keys, model,
+      onProgress: (p) => onProgress('progress', p.cur, p.total)
+    });
+    let classified = 0, failed = 0;
+    for (const r of results) {
+      if (r.ok) {
+        db.setReplyNeeded(r.id, { needsReply: r.needsReply, confidence: r.confidence, reason: r.reason, source: 'llm' });
+        classified++;
+      } else failed++;
+    }
+    return { ok: true, classified, failed, total: targets.length };
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
+// --- 회신 필요성 수동 재지정 (마스터 판단이 항상 우선, LLM 재판정이 절대 안 덮음) ---
+ipcMain.handle('reply:setManual', (_e, { id, needsReply } = {}) => {
+  try {
+    requireDb();
+    return db.setReplyNeeded(id, { needsReply: !!needsReply, confidence: 1, reason: '마스터가 직접 지정', source: 'manual' });
+  } catch (e) { return { ok: false, error: String(e.message || e) }; }
+});
+
 // --- 통계 (대시보드) ---
 ipcMain.handle('db:stats', () => {
   try { requireDb(); return { ok: true, stats: db.stats(), lastSyncAt: db.getState('lastSyncAt') }; }
@@ -2245,6 +2298,9 @@ function buildTodoDigest() {
   try { un = db.unansweredMails({ days: 30, limit: 40, minDays: 1, excludeClosed: true }) || []; } catch (e) { un = []; }
   try { todo = db.actionMails({ state: 'todo', limit: 60 }) || []; } catch (e) { todo = []; }
   try { hold = db.actionMails({ state: 'hold', limit: 40 }) || []; } catch (e) { hold = []; }
+  // ★ SoT: "회신 대기" 카운트·브리핑 노출은 db.unansweredMails() 가 붙여 준 replyBucket 을 그대로 따른다
+  //   (reply-needed.js bucketOf() 파생 — 화면·대시보드·브리핑이 각자 계산하면 반드시 갈라진다).
+  const unNeeded = un.filter(m => m.replyBucket !== 'notneeded');
   const seen = new Set();
   const rows = [];
   const push = (m, kind, extra) => {
@@ -2256,11 +2312,11 @@ function buildTodoDigest() {
   };
   todo.filter(m => m.action_due).sort((a, b) => String(a.action_due).localeCompare(String(b.action_due)))
     .forEach(m => push(m, '기한 있는 할 일', '기한 ' + m.action_due));
-  un.slice().sort((a, b) => (b.daysWaiting || 0) - (a.daysWaiting || 0))
-    .forEach(m => push(m, '회신 대기', m.daysWaiting ? m.daysWaiting + '일 경과' : ''));
+  unNeeded.slice().sort((a, b) => (b.daysWaiting || 0) - (a.daysWaiting || 0))
+    .forEach(m => push(m, '회신 대기', (m.daysWaiting ? m.daysWaiting + '일 경과' : '') + (m.replyUncertain ? ' · 판단 불확실' : '')));
   todo.filter(m => !m.action_due).forEach(m => push(m, '내 할 일', ''));
   hold.forEach(m => push(m, '보류', ''));
-  return { rows: rows.slice(0, 15), counts: { unanswered: un.length, todo: todo.length, hold: hold.length } };
+  return { rows: rows.slice(0, 15), counts: { unanswered: unNeeded.length, todo: todo.length, hold: hold.length } };
 }
 
 // --- AI 대화형 질의 (DB 검색결과를 근거로) ---
