@@ -9,6 +9,12 @@
    `/chat/completions` 전용, Jev 경로는 별개) — 단 마스터가 (B) JevK5 로컬을 택했으므로 OpenRouter
    Jev API 자체는 안 쓴다(잔액 음수 방지). 키 저장 위치는 `apiKeysByProvider.openrouter` 1곳(SoT).
 
+### 6번 세부 진행 (지휘자, 2026-09-28)
+- [x] ③-a 설치·기동·한국어 사전판정 — 조건부 진행(한국어 원문 state 가 영어특징보다 우수, n=5)
+- [x] ③-b **측정 전용**: Jev 어댑터(`src/jev.js`, 백엔드 교체형) + 온디맨드 서버 수명주기(`src/jev-server.js`, VRAM 확인·유휴 종료) + 4질문 × 24건 실측(`scripts/jev-measure.mjs`, §10-5 표). 앱 UI 연결 없음(고아 스캔 ERROR 0 확인).
+- [ ] ③-c 측정 통과 판정만 앱 연결(감사 기록·「추정」 배지·폴백).
+- 🔴 설계 제약: 마스터는 CAD(AutoCAD·Navisworks·GstarCAD) 사용 → **JevK5 상시 구동 금지**. VRAM 5.6/6GB 점유 실측 → 기동 전 여유 VRAM 확인, 부족하면 CPU 또는 건너뜀. 마스터 기존 지시 「PC 메모리에 영향 없어야」 준수.
+
 ## 완료분 (2026-09-28)
 1. [x] 답장 초안 TypeError 수정 — `aiBoxEl()`/`aiq()` 공유 헬퍼 신설, box 보유 호출부는 `box.querySelector`.
    동일 패턴 전수 수정(rpDraftReply·refineAnalysis·refineDraft·showPrevDraft·updateIterVersionLabel·
@@ -63,6 +69,43 @@
   기동/언로드 구조 필요. **표본 5건은 사전판정용, 본적용 전 20건+ 정식 일치율 실측 필수**(스킬§7-4, 다음
   발주). 서버 2개 테스트 후 종료 완료(상주 없음), VRAM 1.9GB로 원복 확인.
 
+
+## ③-b Jev 측정 결과 (2026-09-28, 실API/실DB 24건, `scripts/jev-measure.mjs` 실행)
+- **구성**: `src/jev.js`(단일 어댑터, backend='local'|'openrouter', openrouter 코드만 존재·기본 비활성) +
+  `src/jev-server.js`(VRAM 확인→GPU/CPU 자동 선택→온디맨드 기동→유휴 5분 자동종료). 셀프체크 10건 세트에
+  `jev.js` 추가(`scripts/selfcheck.mjs` [10]), 뮤테이션 증명 완료(임계값 분기 변조 시 FAIL→원복 PASS 재확인).
+- **표본**: 실DB(읽기전용) 층화 24건(직접수신요청/참조통보/도면송부/견적승인/광고뉴스레터/회신완료스레드 각 4건, 카테고리는 규칙기반 휴리스틱 분류).
+- **기준 라벨**: 앱 실체인 LLM(OpenRouter `nvidia/nemotron-3-ultra-550b-a55b:free`) 1회/건, 24건 전부 성공(0 실패)
+  — 🔴 최초 시도에서 `maxTokens:200`으로 16/24 가 reasoning_tokens(~200~250)에 먹혀 JSON 중간 절단(`truncated:true`)돼
+  전부 비교불능이었음(거짓축소 방지: LLM 실패를 조용히 삼키지 않고 로그+집계에 노출하도록 수정) → `maxTokens:900`으로
+  재측정해 0/24 실패로 해결. 실측 근거: `/tmp/jevdebug2.mjs` — 200 한도에서 `completion_tokens:200` 전량 소모, 900 한도에서 정상 완결.
+- **VRAM/기동**: 측정 시점 여유 VRAM 3,506MB(기준 4,000MB 미만, ZWCAD.exe 등 실사용 중이었음 확인) →
+  **GPU 기동 자동 차단, CPU 모드(-ngl 0)로 안전 대체**(설계대로 동작). 콜드 기동 4,162ms. 적재 후 피크 VRAM 사용
+  ≈176MB(CPU 모드라 매우 작음). 종료 후 프로세스 좀비 0(`tasklist llama-server.exe` 없음 확인) — VRAM 수치 자체는
+  측정 전(3,506MB)/후(3,004MB) 완전 일치하지 않으나 JevK5 피크 점유(176MB)로 설명 안 되는 차이라 다른 GPU 프로세스
+  (브라우저 등) 변동으로 판단([Uncertain], 좀비 프로세스는 확인상 없음).
+- **지연**: Jev(4질문/1콜, CPU 모드) 평균 15,716ms 최대 24,880ms — GPU 미검증(이번 세션 VRAM 부족으로 GPU 경로 못 탐).
+  LLM(1콜/건) 평균 6,264ms 최대 16,828ms.
+- **일치율·폴백(질문별, 스킬 §10-5)**:
+
+| 질문 | 판정건수 | P | 일치율(p≥0.70만) | 일치율(전체) | 폴백률(p<0.70) | 판정 |
+|---|---|---|---|---|---|---|
+| action | 24 | 미측정 | 66.7%(14/21) | 66.7%(16/24) | 12.5%(3/24) | 보류(일치율 미달) |
+| reply_needed | 24 | 미측정 | 76.9%(10/13) | 70.8%(17/24) | 45.8%(11/24) | 보류(일치율·폴백률 둘 다 미달) |
+| theme | 24 | 미측정 | 76.2%(16/21) | 66.7%(16/24) | 12.5%(3/24) | 보류(일치율 미달, 90%에 근접) |
+| is_newsletter | 24 | 미측정 | 95.8%(23/24) | 95.8%(23/24) | 0.0%(0/24) | **본적용 후보**(기준 p≥0.70 일치율≥90%·폴백≤30% 충족) |
+
+  - 비용: 로컬 0 / LLM 무료쿼터 **실제 24건**(질문 4종을 1콜에 묶어 처리 — 표에 "24건"이 4번 나오는 건 같은
+    24콜을 4개 질문 관점에서 각각 집계한 것이지 96콜이 아니다).
+  - action 불일치 8건 중 6건이 "Jev=todo, LLM=fyi"로 한 방향 쏠림(Jev 가 action 에서 과도하게 todo 로 판정하는
+    경향, [Uncertain] 원인 미규명 — 표본 확대 필요). theme 불일치는 report↔drawing/approval 경계 혼동이 다수.
+- **판정 권고(④, 근거: p≥0.70 일치율≥90%·폴백≤30%)**: **is_newsletter만 본적용 후보.** action·theme·reply_needed
+  는 90% 문턱 미달로 보류 — 「추정 표시로만」조차 아직 이르다(스킬 §4 "형식 보장≠정답 보장" 그대로 재현: 확률은
+  높은데(theme 최대 0.99) 틀린 사례 다수, 예: #4317 action p=0.990 인데 LLM 과 불일치).
+- **한계**: GPU 경로 미검증(VRAM 부족으로 CPU만 측정) — GPU 지연·정확도가 다를 가능성 있음. LLM 자체도 틀릴 수
+  있어 "기준"이 아니라 "대조군"일 뿐(스킬 §7-4 취지). 표본 24건은 아직 20건대 초반이라 분류 경계(action
+  todo/fyi, theme report/drawing)의 통계적 신뢰도는 낮음.
+- 원본 로그: 세션 스크래치패드 `/tmp/jev-measure-run3.log`(최종본, maxTokens 900).
 
 ## 문서 부트스트랩 (2026-09-28)
 - `CLAUDE.md`(정체 카드) 신설, `ECOSYSTEM_START_GUIDE.md` §14 레지스트리 1줄 등록. FILEMAP.md 미생성(다음 발주에서 `_warehouse/05-scripts-build/filemap.mjs` 로 생성).
