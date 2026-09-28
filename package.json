@@ -1,7 +1,7 @@
 {
   "name": "outlook-ai-assistant",
   "version": "1.0.0",
-  "description": "Outlook AI 어시스턴트 - 대화형 메일 검색 및 첨부파일 분석 (Cerebras)",
+  "description": "Bmail - 메일 검색·요약·번역·답장 초안 (Outlook 연동 + Cerebras)",
   "main": "src/main.js",
   "author": "You",
   "license": "MIT",
@@ -9,13 +9,19 @@
     "start": "electron .",
     "postinstall": "electron-builder install-app-deps",
     "rebuild": "electron-builder install-app-deps",
-    "dist": "electron-builder --win --x64",
-    "dist:publish": "electron-builder --win --x64 --publish always"
+    "dist": "npm run prebuild && electron-builder --win --x64",
+    "install:app": "node scripts/install-silent.mjs",
+    "dist:install": "npm run dist && npm run install:app && npm run verify:install",
+    "dist:publish": "electron-builder --win --x64 --publish always",
+    "scan:orphans": "node scripts/scan-orphans.mjs",
+    "selfcheck": "node scripts/selfcheck.mjs",
+    "prebuild": "node scripts/selfcheck.mjs && node scripts/scan-orphans.mjs --guard",
+    "verify:install": "node scripts/post-install-verify.mjs --fix"
   },
   "build": {
     "appId": "com.you.outlook-mail-client",
-    "productName": "Outlook",
-    "artifactName": "Outlook-Setup-${version}.${ext}",
+    "productName": "Bmail",
+    "artifactName": "Bmail-Setup-${version}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -47,7 +53,7 @@
       "deleteAppDataOnUninstall": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Outlook"
+      "shortcutName": "Bmail"
     },
     "publish": {
       "provider": "github",

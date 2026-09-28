@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:;" />
-  <title>Outlook</title>
+  <title>Bmail</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -13,33 +13,60 @@
     <div id="titlebar">
       <div class="tb-left">
         <span class="tb-logo">
-          <svg viewBox="0 0 24 24" width="18" height="18"><rect x="1" y="4" width="22" height="16" rx="2" fill="#0078d4"/><path d="M3 7l9 6 9-6" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <img src="assets/icon.png" width="18" height="18" alt="Bmail" class="tb-logo-img" />
         </span>
-        <span class="tb-title">Outlook <span id="app-version" class="tb-ver"></span></span>
+        <span class="tb-title">Bmail <span id="app-version" class="tb-ver"></span></span>
       </div>
       <div class="tb-search">
         <span class="tb-search-ic">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         </span>
-        <input id="global-search" type="text" placeholder="검색" />
+        <input id="global-search" type="text" placeholder="메일 검색  Ctrl+E" title="자연어로 조건을 함께 쓸 수 있습니다 — 보낸사람·받는사람·첨부·기간·읽지 않음 (예: OO가 보낸 OO 관련 메일)" />
       </div>
       <div class="tb-right">
+        <!-- 전역 AI 대화 — 어느 화면에서든 뷰 전환 없이 열린다 (Ctrl+/ 또는 Ctrl+K) -->
+        <button id="btn-gchat" class="tb-gchat" type="button" title="AI 대화 열기/닫기 (Ctrl+/ · Ctrl+K) — 지금 보던 화면은 그대로 유지됩니다">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
+          <span>AI 대화</span><kbd class="tb-gchat-kbd">Ctrl+/</kbd>
+        </button>
+        <span id="ai-state-pill" class="ai-pill" title="AI 상태 — 클릭하면 설정에서 키를 점검합니다"><span class="cp-dot"></span> AI 확인 중</span>
         <span id="conn-pill" class="conn-pill" title="연결 상태"><span class="cp-dot"></span> 확인 중</span>
       </div>
     </div>
 
+    <!-- ===================== 전역 AI 대화 패널 ===================== -->
+    <!-- 기존 '메일 검색' 뷰의 대화 컴포넌트를 그대로 이 안으로 옮겨 담는다(세션·이력 공유, 중복 구현 0) -->
+    <aside id="gchat" class="gchat collapsed" aria-label="AI 대화">
+      <!-- 왼쪽 가장자리를 끌어 폭을 조절한다(마지막 폭 기억) -->
+      <div id="gchat-resize" class="gchat-resize" title="드래그해서 대화창 폭을 조절합니다"></div>
+      <div class="gchat-head">
+        <span class="gchat-title">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
+          AI 대화<kbd class="gchat-kbd">Ctrl+/</kbd>
+        </span>
+        <button id="gchat-dock" class="gchat-x gchat-dock" type="button" title="대화를 메인 화면에 크게 엽니다 (다음부터도 이 방식으로 열립니다)">메인에 크게</button>
+        <span id="gchat-ctx" class="gchat-ctx" title="현재 화면 맥락 — 질문에 함께 전달됩니다"></span>
+        <button id="gchat-ctx-clear" class="gchat-x" type="button" title="맥락 없이 대화하기">맥락 해제</button>
+        <button id="gchat-clear" class="gchat-x" type="button" title="대화 이력 지우기">이력 초기화</button>
+        <button id="gchat-close" class="gchat-x" type="button" title="접기 (Esc · Ctrl+/)">접기</button>
+      </div>
+      <div id="gchat-host" class="gchat-host"></div>
+    </aside>
+
     <!-- ===================== 메뉴 탭 행 ===================== -->
     <nav id="menu-tabs">
-      <button class="menu-tab" type="button">파일</button>
-      <button class="menu-tab active" type="button">홈</button>
-      <button class="menu-tab" type="button">보내기/받기</button>
-      <button class="menu-tab" type="button">폴더</button>
-      <button class="menu-tab" type="button">보기</button>
-      <button class="menu-tab" type="button">도움말</button>
+      <button class="menu-tab" type="button" data-tab="file">파일</button>
+      <button class="menu-tab active" type="button" data-tab="home">홈</button>
+      <button class="menu-tab" type="button" data-tab="sendrecv">보내기/받기</button>
+      <button class="menu-tab" type="button" data-tab="folder">폴더</button>
+      <button class="menu-tab" type="button" data-tab="view">보기</button>
+      <button class="menu-tab" type="button" data-tab="help">도움말</button>
     </nav>
 
     <!-- ===================== 리본(명령바) ===================== -->
     <div id="ribbon">
+      <!-- ===== 홈 탭 리본 ===== -->
+      <div class="ribbon-group" data-ribbon="home">
       <div class="rb-block">
         <div class="rb-row">
           <button id="rb-new" class="rb-btn rb-big rb-primary" title="새 메일"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span>새 메일</span></button>
@@ -49,10 +76,25 @@
       <span class="rb-sep"></span>
       <div class="rb-block">
         <div class="rb-row">
-          <button id="rb-reply" class="rb-btn" title="답장" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg><span>답장</span></button>
-          <button id="rb-translate" class="rb-btn" title="번역" disabled><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>번역</span></button>
+          <button id="rb-reply" class="rb-btn" title="답장 (메일 선택 후)"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17l-6-5 6-5"/><path d="M3 12h11a6 6 0 0 1 6 6v1"/></svg><span>답장</span></button>
+          <button id="rb-forward" class="rb-btn" title="전달 (메일 선택 후) — Outlook 작성창을 바로 엽니다"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17l6-5-6-5"/><path d="M21 12H10a6 6 0 0 0-6 6v1"/></svg><span>전달</span></button>
+          <button id="rb-translate" class="rb-btn" title="번역 (메일 선택 후)"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><span>번역</span></button>
         </div>
         <div class="rb-glabel">응답</div>
+      </div>
+      <span class="rb-sep"></span>
+      <div class="rb-block">
+        <div class="rb-row">
+          <button id="rb-bigmail" class="rb-btn rb-big" title="대용량 파일을 올려 다운로드 링크를 메일 본문에 넣습니다 (한 번에 100MB까지)"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="M8 8l4-4 4 4"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg><span>대용량 첨부</span></button>
+        </div>
+        <div class="rb-glabel">삽입</div>
+      </div>
+      <span class="rb-sep"></span>
+      <div class="rb-block">
+        <div class="rb-row">
+          <button id="rb-aidraft" class="rb-btn" title="AI가 답장 초안을 만들어 줍니다 (누를 때만 동작)"><svg class="rb-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg><span>AI 작성 도움</span></button>
+        </div>
+        <div class="rb-glabel">작성 도움</div>
       </div>
       <span class="rb-sep"></span>
       <div class="rb-block">
@@ -63,6 +105,109 @@
         </div>
         <div class="rb-glabel">도구</div>
       </div>
+      </div><!-- /홈 -->
+
+      <!-- ===== 파일 탭 리본 ===== -->
+      <div class="ribbon-group hidden" data-ribbon="file">
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbf-settings" class="rb-btn rb-big rb-primary" title="설정 열기"><span class="rb-tx">설정</span></button>
+            <button id="rbf-diag" class="rb-btn" title="관리자 진단 정보"><span class="rb-tx">정보 · 진단</span></button>
+          </div>
+          <div class="rb-glabel">앱</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbf-attachdir" class="rb-btn" title="저장된 첨부 폴더 열기"><span class="rb-tx">첨부 폴더</span></button>
+          </div>
+          <div class="rb-glabel">데이터</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block"><div class="rb-row"><span id="rbf-info" class="rb-info">-</span></div><div class="rb-glabel">현재 상태</div></div>
+      </div>
+
+      <!-- ===== 보내기/받기 탭 리본 ===== -->
+      <div class="ribbon-group hidden" data-ribbon="sendrecv">
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbs-sync" class="rb-btn rb-big rb-primary" title="전체 동기화"><span class="rb-tx">모두 보내기/받기</span></button>
+            <button id="rbs-checknew" class="rb-btn" title="새 메일만 확인"><span class="rb-tx">새 메일 확인</span></button>
+            <button id="rbs-refreshall" class="rb-btn" title="새 메일 + Outlook 쪽 변경(읽음·이동·범주·깃발)까지 지금 즉시 반영 (F5)"><span class="rb-tx">최신 상태로</span></button>
+          </div>
+          <div class="rb-glabel">동기화</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block">
+          <div class="rb-row">
+            <label class="rb-check"><input type="checkbox" id="rbs-attach" /> 첨부 저장</label>
+            <label class="rb-check"><input type="checkbox" id="rbs-archive" /> 아카이브 PST</label>
+          </div>
+          <div class="rb-glabel">옵션</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbs-bigmail" class="rb-btn rb-big" title="대용량 파일을 올려 다운로드 링크를 메일 본문에 넣습니다"><span class="rb-tx">대용량 첨부</span></button>
+          </div>
+          <div class="rb-glabel">보내기</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block"><div class="rb-row"><span id="rbs-lastsync" class="rb-info">-</span></div><div class="rb-glabel">마지막 동기화</div></div>
+      </div>
+
+      <!-- ===== 폴더 탭 리본 ===== -->
+      <div class="ribbon-group hidden" data-ribbon="folder">
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbd-toggletree" class="rb-btn rb-big" title="폴더 창 접기/펼치기"><span class="rb-tx">폴더 창 접기</span></button>
+            <button id="rbd-reload" class="rb-btn" title="Outlook 폴더 구조 다시 읽기"><span class="rb-tx">폴더 새로고침</span></button>
+          </div>
+          <div class="rb-glabel">폴더 창</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block">
+          <div class="rb-row"><button id="rbd-stats" class="rb-btn" title="폴더별 메일 수"><span class="rb-tx">폴더별 통계</span></button></div>
+          <div class="rb-glabel">정보</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block"><div class="rb-row"><span id="rbd-info" class="rb-info">-</span></div><div class="rb-glabel">현재 폴더</div></div>
+      </div>
+
+      <!-- ===== 보기 탭 리본 ===== -->
+      <div class="ribbon-group hidden" data-ribbon="view">
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbv-mail" class="rb-btn rb-big" title="메일"><span class="rb-tx">메일</span></button>
+            <button id="rbv-dashboard" class="rb-btn" title="대시보드"><span class="rb-tx">대시보드</span></button>
+            <button id="rbv-chat" class="rb-btn" title="메일 검색"><span class="rb-tx">메일 검색</span></button>
+            <button id="rbv-contacts" class="rb-btn" title="주소록"><span class="rb-tx">주소록</span></button>
+          </div>
+          <div class="rb-glabel">화면 전환</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block">
+          <div class="rb-row">
+            <label class="rb-check"><input type="checkbox" id="rbv-thread" /> 대화별 보기</label>
+            <label class="rb-check"><input type="checkbox" id="rbv-attach" /> 첨부만 보기</label>
+          </div>
+          <div class="rb-glabel">정렬/필터</div>
+        </div>
+      </div>
+
+      <!-- ===== 도움말 탭 리본 ===== -->
+      <div class="ribbon-group hidden" data-ribbon="help">
+        <div class="rb-block">
+          <div class="rb-row">
+            <button id="rbh-open" class="rb-btn rb-big rb-primary" title="도움말"><span class="rb-tx">도움말 열기</span></button>
+            <button id="rbh-diag" class="rb-btn" title="연결 테스트"><span class="rb-tx">연결 테스트</span></button>
+          </div>
+          <div class="rb-glabel">지원</div>
+        </div>
+        <span class="rb-sep"></span>
+        <div class="rb-block"><div class="rb-row"><span id="rbh-version" class="rb-info">-</span></div><div class="rb-glabel">버전</div></div>
+      </div>
+
       <span class="rb-sep"></span>
       <!-- PST/소스 전환 -->
       <div class="rb-source">
@@ -77,43 +222,62 @@
 
       <!-- 폴더 트리 창 -->
       <aside id="folders">
-        <!-- 즐겨찾기 -->
+        <!-- ① 즐겨찾기 (Outlook 탐색 창 정본 + 우클릭 추가/제거·순서 이동) -->
         <div class="fld-section">
           <div class="fld-head">즐겨찾기</div>
+          <div id="fav-list" class="fav-list"></div>
+          <div class="fld-divider"></div>
           <button class="fld-item active" data-folder="Inbox"><span class="fld-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-          </span> 받은 편지함 <span class="fld-count" id="cnt-inbox">0</span></button>
+          </span> 받은 편지함 <span class="tree-unread" data-unread="Inbox"></span> <span class="fld-count" id="cnt-inbox">0</span></button>
           <button class="fld-item" data-folder="Sent"><span class="fld-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          </span> 보낸 편지함 <span class="fld-count" id="cnt-sent">0</span></button>
+          </span> 보낸 편지함 <span class="tree-unread" data-unread="Sent"></span> <span class="fld-count" id="cnt-sent">0</span></button>
         </div>
 
-        <!-- 계정 트리 -->
-        <div class="fld-section">
-          <div class="fld-head fld-acct"><span class="fld-caret">▾</span> 내 계정</div>
-          <button class="fld-item fld-sub active" data-folder="all"><span class="fld-ic">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/></svg>
-          </span> 전체 메일 <span class="fld-count" id="cnt-all">0</span></button>
-          <button class="fld-item fld-sub" data-folder="Inbox"><span class="fld-ic">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-          </span> 받은 편지함</button>
-          <button class="fld-item fld-sub" data-folder="Sent"><span class="fld-ic">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          </span> 보낸 편지함</button>
-          <button class="fld-item fld-sub" data-folder="__attach"><span class="fld-ic">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          </span> 첨부 있는 메일 <span class="fld-count" id="cnt-attach">0</span></button>
+        <!-- ② 계정 트리 — Outlook 폴더 구조 그대로 (앱 시작 시 자동 로드) -->
+        <div class="fld-section fld-section-tree">
+          <div class="fld-head fld-acct">
+            <span class="fld-caret">▾</span> 계정 폴더
+            <button id="btn-tree-reload" class="link-btn tree-reload" title="Outlook 폴더 구조 다시 읽기">새로고침</button>
+          </div>
+          <div id="folder-tree" class="folder-tree"><div class="empty-sm">Outlook 폴더 구조를 읽는 중…</div></div>
+          <div id="tree-status" class="tree-status" title="폴더 트리 상태"></div>
         </div>
 
-        <!-- 기타 (뷰 전환) -->
+        <!-- ③ 기타 (앱 전용 보기 · 내 로컬 폴더 · 뷰 전환) -->
         <div class="fld-section">
           <div class="fld-head">기타</div>
+          <button class="fld-item" data-folder="all"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16"/></svg>
+          </span> 전체 메일 <span class="fld-count" id="cnt-all">0</span></button>
+          <button class="fld-item" data-folder="__attach"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          </span> 첨부 있는 메일 <span class="fld-count" id="cnt-attach">0</span></button>
+
+          <!-- 내 로컬 폴더 (Bmail 안에서만 존재 — Outlook 원본 불변) -->
+          <div class="fld-subhead">
+            내 로컬 폴더
+            <button id="btn-vf-new" class="link-btn tree-reload" title="새 로컬 폴더">＋ 새 폴더</button>
+          </div>
+          <div id="vfolder-list" class="vfolder-list"></div>
+
+          <div class="fld-divider"></div>
           <button class="fld-item" data-nav="dashboard"><span class="fld-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
           </span> 대시보드 & 요약</button>
           <button class="fld-item" data-nav="chat"><span class="fld-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
           </span> 메일 검색</button>
+          <button class="fld-item" data-nav="todo"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><path d="M18 17l2 2 3-4"/></svg>
+          </span> 할 일 <span class="fld-count" id="cnt-todo">0</span></button>
+          <button class="fld-item" data-nav="followup"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-1.6 3.5L16 11H5"/></svg>
+          </span> 회신 대기 <span class="fld-count" id="cnt-followup">0</span></button>
+          <button class="fld-item" data-nav="worklog"><span class="fld-ic">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h11l3 3v15H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          </span> 업무일지</button>
           <button class="fld-item" data-nav="contacts"><span class="fld-ic">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
           </span> 주소록</button>
@@ -124,7 +288,6 @@
 
         <div class="fld-foot">
           <div id="sync-info" class="sync-info">동기화 필요</div>
-          <div id="update-badge" class="update-badge hidden"></div>
           <div id="key-status" class="key-status">API 키: 확인 중...</div>
         </div>
       </aside>
@@ -139,20 +302,133 @@
             <div class="mlp-head">
               <span id="mlp-title">전체 메일</span>
               <span id="realtime-dot" class="realtime-dot hidden" title="실시간 감시 중"><span class="rt-dot"></span> 실시간</span>
+              <label class="mlp-attach"><input type="checkbox" id="filter-thread" /> 대화별</label>
               <label class="mlp-attach"><input type="checkbox" id="filter-attach" /> 첨부만</label>
+            </div>
+            <!-- 검색 조건 칩 (전역 검색바에서 파싱된 조건) -->
+            <div id="search-chips" class="search-chips hidden"></div>
+            <!-- ★ 4탭(마스터 지시): 검색 결과는 기본이 타임라인. 검색 중일 때만 노출. -->
+            <div id="result-tabs" class="result-tabs hidden">
+              <button class="rt-tab" data-tab="timeline" type="button">타임라인</button>
+              <button class="rt-tab" data-tab="list" type="button">목록</button>
+              <button class="rt-tab" data-tab="person" type="button">사람별</button>
+              <button class="rt-tab" data-tab="keyword" type="button">키워드별</button>
+              <button id="rt-xls" class="rt-xls" type="button" title="지금 보고 있는 탭을 엑셀로 내보냅니다">엑셀</button>
+            </div>
+            <!-- 모든 항목 / 읽지 않음 탭 + 정렬 -->
+            <div class="mlp-bar">
+              <div class="mlp-tabs">
+                <button class="mlp-tab active" data-readtab="all" type="button">모든 항목</button>
+                <button class="mlp-tab" data-readtab="unread" type="button">읽지 않음 <span id="mlp-unread-count" class="mlp-badge">0</span></button>
+                <span class="mlp-sep"></span>
+                <button class="mlp-tab" data-tometab="1" type="button" title="내가 받는사람(To)인 메일만">직접 수신</button>
+                <button class="mlp-tab" data-tometab="0" type="button" title="내가 참조(CC)로 들어간 메일만">참조</button>
+                <span class="mlp-tab-sep"></span>
+                <!-- 처리 상태 = 필터 전용 색 칩. 상태 지정은 우클릭·읽기창 버튼·단축키로만 한다. -->
+                <button class="as-chip as-todo" data-astab="todo" type="button" title="필터: 할 일 (내가 처리해야 하는 메일)">할 일 <span data-ascnt="todo">0</span></button>
+                <button class="as-chip as-hold" data-astab="hold" type="button" title="필터: 보류 (지금은 못 하거나 상대 회신 대기)">보류 <span data-ascnt="hold">0</span></button>
+                <button class="as-chip as-done" data-astab="done" type="button" title="필터: 처리 (끝난 메일)">처리 <span data-ascnt="done">0</span></button>
+                <button class="as-chip as-fyi" data-astab="fyi" type="button" title="필터: 확인 (내용만 알면 되는 통보성)">확인 <span data-ascnt="fyi">0</span></button>
+                <button class="as-chip as-none" data-astab="none" type="button" title="필터: 아직 상태를 지정하지 않은 메일">미지정 <span data-ascnt="none">0</span></button>
+                <button id="btn-filter-reset" class="filter-reset hidden" type="button" title="모든 필터를 끄고 전체를 봅니다">필터 초기화</button>
+                <span id="filter-summary" class="filter-summary hidden"></span>
+              </div>
+              <div class="mlp-sort">
+                <label for="sort-by" class="sr-label">기준:</label>
+                <select id="sort-by" title="정렬 기준">
+                  <option value="date">날짜</option>
+                  <option value="sender">보낸 사람</option>
+                  <option value="subject">제목</option>
+                  <option value="attach">첨부</option>
+                </select>
+                <button id="sort-dir" class="sort-dir-btn" title="정렬 방향" data-dir="desc">▼</button>
+                <button id="btn-xls-mail" class="xls-btn" title="지금 화면의 목록을 필터·정렬 그대로 엑셀로 내보냅니다">엑셀</button>
+              </div>
             </div>
             <div id="mail-list" class="mail-list">
               <div class="empty">상단 <b>동기화</b> 후 메일이 여기에 표시됩니다.</div>
             </div>
           </div>
-          <!-- 읽기 창 -->
-          <div class="reading-pane" id="reading-pane">
-            <div class="rp-empty" id="rp-empty">
-              <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg></div>
-              <div>왼쪽에서 메일을 선택하면 여기에 내용이 표시됩니다.</div>
-              <div class="rp-empty-sub">메일이 없으면 상단 <b>동기화</b>를 먼저 실행하세요.</div>
+          <!-- 목록 ↔ 본문 리사이저 -->
+          <div class="grid-rz grid-rz-v" id="rz-list" title="드래그해서 목록 너비를 조절합니다"></div>
+
+          <!-- ★ 메일 본문 — 세로로 쪼개지 않고 이 열 전체를 단독으로 쓴다(가장 넓은 영역) -->
+          <section class="rs-sec" id="rs-read">
+            <header class="rs-head" data-sec="read">
+              <svg class="rs-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
+              <span class="rs-title">메일 본문</span>
+              <button class="rs-back" id="rs-back" type="button" title="메일 목록으로">◀ 목록</button>
+              <span class="rs-sub" id="rs-read-sub"></span>
+              <button class="rs-sidetoggle" id="rs-side-toggle" type="button" title="오른쪽 도구 패널 접기/펴기">도구 ▸</button>
+            </header>
+            <div class="rs-body">
+              <div class="reading-pane" id="reading-pane">
+                <div class="rp-empty" id="rp-empty">
+                  <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 7l10 7 10-7"/></svg></div>
+                  <div>왼쪽에서 메일을 선택하면 여기에 내용이 표시됩니다.</div>
+                  <div class="rp-empty-sub">메일이 없으면 상단 <b>동기화</b>를 먼저 실행하세요.</div>
+                </div>
+                <div id="rp-content" class="rp-content hidden"></div>
+              </div>
             </div>
-            <div id="rp-content" class="rp-content hidden"></div>
+          </section>
+
+          <!-- 본문 ↔ 도구 패널 리사이저 -->
+          <div class="grid-rz grid-rz-v" id="rz-side" title="드래그해서 도구 패널 너비를 조절합니다"></div>
+
+          <!-- ★ 오른쪽 도구 패널 — 좁은 열에 세로 3단 (분석 / 대화 / 미리보기) -->
+          <div class="side-stack" id="side-stack">
+            <!-- 좁은 창에서만 쓰는 탭 (1400px 미만) -->
+            <div class="side-tabs" id="side-tabs">
+              <button class="rs-tab" data-side="ai" type="button">분석</button>
+              <button class="rs-tab active" data-side="chat" type="button">대화</button>
+              <button class="rs-tab" data-side="prev" type="button">미리보기</button>
+            </div>
+
+            <!-- ① AI 분석 -->
+            <section class="rs-sec collapsed" id="rs-ai">
+              <header class="rs-head" data-sec="ai">
+                <span class="rs-caret">▸</span>
+                <svg class="rs-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="4"/></svg>
+                <span class="rs-title">AI 분석</span>
+                <span class="rs-sub" id="rs-ai-sub"></span>
+              </header>
+              <div class="rs-body">
+                <div id="rs-ai-body" class="rs-ai-body">
+                  <div class="rs-placeholder"><b>번역/분석</b> 또는 <b>AI 작성 도움</b>을 누르면 결과가 여기에 표시됩니다.</div>
+                </div>
+              </div>
+            </section>
+
+            <div class="grid-rz grid-rz-h" id="rz-chat" title="드래그해서 높이를 조절합니다"></div>
+
+            <!-- ② AI 대화 (기본 펼침) -->
+            <section class="rs-sec" id="rs-chat">
+              <header class="rs-head" data-sec="chat">
+                <span class="rs-caret">▾</span>
+                <svg class="rs-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.7A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>
+                <span class="rs-title">AI 대화</span>
+                <span class="rs-sub" id="rs-chat-sub"></span>
+              </header>
+              <div class="rs-body">
+                <div class="rs-pane" id="rs-pane-chat"></div>
+              </div>
+            </section>
+
+            <div class="grid-rz grid-rz-h" id="rz-prev" title="드래그해서 높이를 조절합니다"></div>
+
+            <!-- ③ 첨부 미리보기 -->
+            <section class="rs-sec collapsed" id="rs-prev">
+              <header class="rs-head" data-sec="prev">
+                <span class="rs-caret">▸</span>
+                <svg class="rs-ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <span class="rs-title">첨부 미리보기</span>
+                <span class="rs-sub" id="rs-prev-sub"></span>
+              </header>
+              <div class="rs-body">
+                <div class="rs-pane" id="rs-pane-prev"></div>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -168,6 +444,57 @@
             <div class="stat-card"><div class="stat-num" id="stat-attach">0</div><div class="stat-label">첨부 있음</div></div>
             <div class="stat-card"><div class="stat-num" id="stat-contacts">0</div><div class="stat-label">주소록</div></div>
           </div>
+          <!-- ===== 일정 달력 (분석·업무일지에서 모은 마감 + 수동 등록) ===== -->
+          <div class="dash-box cal-box">
+            <h3>일정 달력
+              <span id="cal-stats" class="cal-stats">0건</span>
+              <button id="btn-cal-collect" class="link-btn" title="저장된 분석·업무일지에서 기한을 다시 모읍니다 (AI 재호출 없음)">일정 수집</button>
+            </h3>
+            <p class="hint" style="margin:2px 0 10px;">메일 분석·일일 브리핑·업무일지에서 찾은 기한을 모아 보여줍니다. 날짜를 더블클릭하면 직접 추가할 수 있습니다.</p>
+            <div class="cal-bar">
+              <button id="btn-cal-prev" class="wl-btn" title="이전 달">◀</button>
+              <span id="cal-title" class="cal-title">-</span>
+              <button id="btn-cal-next" class="wl-btn" title="다음 달">▶</button>
+              <button id="btn-cal-today" class="wl-btn">오늘</button>
+            </div>
+            <div class="cal-grid" id="cal-grid"></div>
+            <div class="cal-upcoming">
+              <h4>다가오는 마감 7일 <span id="cal-up-count" class="badge badge-warn">0</span></h4>
+              <div id="cal-upcoming-list" class="cal-up-list"></div>
+            </div>
+          </div>
+          <!-- 날짜 클릭 팝오버 -->
+          <div id="cal-popover" class="cal-popover hidden">
+            <div class="cal-pop-head">
+              <span id="cal-pop-date">-</span>
+              <button id="cal-pop-close" class="link-btn" title="닫기">닫기</button>
+            </div>
+            <div id="cal-pop-list" class="cal-pop-list"></div>
+            <div class="cal-pop-add">
+              <input id="cal-pop-title" type="text" placeholder="새 일정 제목" />
+              <input id="cal-pop-time" type="time" title="시각(선택)" />
+              <button id="cal-pop-save" class="btn-primary">추가</button>
+            </div>
+          </div>
+
+          <!-- 일일 메일 브리핑 (날짜 선택 + 서술형 4섹션) -->
+          <div class="dash-box daily-box">
+            <h3>일일 메일 브리핑</h3>
+            <div class="daily-bar">
+              <button id="btn-daily-prev" class="wl-btn" title="전날">◀</button>
+              <input id="daily-date" type="date" class="daily-date" />
+              <button id="btn-daily-next" class="wl-btn" title="다음날">▶</button>
+              <button id="btn-daily-today" class="wl-btn">오늘</button>
+              <button id="btn-daily-run" class="btn-primary">브리핑 생성</button>
+              <button id="btn-daily-refresh" class="wl-btn" title="캐시 무시하고 다시 생성">다시 생성</button>
+              <span id="daily-status" class="rb-info"></span>
+            </div>
+            <div id="daily-dates" class="hint-text"></div>
+            <div id="daily-result" class="briefing-result">
+              <div class="empty">날짜를 고르고 <b>브리핑 생성</b>을 누르세요. 같은 날짜는 저장된 결과를 즉시 보여줍니다.</div>
+            </div>
+          </div>
+
           <div class="briefing-bar">
             <span>요약 기간:</span>
             <button class="brief-btn" data-mode="today">오늘</button>
@@ -178,6 +505,34 @@
           <div id="briefing-result" class="briefing-result">
             <div class="empty">먼저 상단 <b>동기화</b>로 메일을 가져온 뒤 <b>요약 생성</b>을 눌러주세요.</div>
           </div>
+          <div class="dash-box hidden" id="folder-stats-box">
+            <h3>폴더별 메일 수</h3>
+            <div id="folder-stats" class="top-senders"></div>
+          </div>
+          <div class="dash-box">
+            <h3>통합 대시보드 · 내보내기</h3>
+            <p class="hint" style="margin:2px 0 10px;">날짜별·프로젝트별·테마별 3축 집계를 <b>파일 한 장</b>으로 만듭니다. 외부 프로그램 없이 브라우저로 바로 열리고, 표마다 검색·정렬이 됩니다. 만들 때마다 같은 파일을 덮어써서 파일이 쌓이지 않습니다.</p>
+            <div class="exp-row">
+              <label class="inline-num">집계 단위
+                <select id="dash-granularity">
+                  <option value="day" selected>일별</option>
+                  <option value="week">주별</option>
+                  <option value="month">월별</option>
+                </select>
+              </label>
+              <button id="btn-dash-html" class="btn-primary">통합 대시보드 만들기</button>
+              <button id="btn-dash-xls">집계표 엑셀로</button>
+              <button id="btn-export-root">저장 폴더 지정</button>
+              <button id="btn-export-open">저장 폴더 열기</button>
+            </div>
+            <div id="export-info" class="hint-text">저장 위치를 확인 중...</div>
+          </div>
+          <div class="dash-box unans-box">
+            <h3>미회신 경고 <span id="unanswered-count" class="badge badge-warn">0</span>
+              <button id="btn-unanswered-refresh" class="link-btn">새로고침</button></h3>
+            <p class="hint" style="margin:2px 0 10px;">최근 14일 내 받았지만 아직 답장하지 않은 대화입니다. (날짜 최신순)</p>
+            <div id="unanswered-box" class="unans-list"></div>
+          </div>
           <div class="dash-cols">
             <div class="dash-box"><h3>주요 발신자</h3><div id="top-senders" class="top-senders"></div></div>
             <div class="dash-box"><h3>언어별 분포</h3><div id="lang-dist" class="lang-dist"></div></div>
@@ -185,23 +540,167 @@
         </div>
 
         <!-- ===== 대화형 검색 뷰 ===== -->
-        <div id="view-chat" class="view chat-view">
-          <div id="chat-log" class="chat-log">
-            <div class="msg assistant">
-              <div class="bubble">
-                Outlook 메일을 검색하고, 첨부파일(PDF·엑셀·이미지·워드)의 내용을 확인할 수 있습니다.<br><br>
-                <b>이렇게 물어보세요:</b><br>
-                • "결제 관련 메일 찾아줘"<br>
-                • "홍길동이 보낸 메일 요약해줘"<br>
-                • 아래 + 버튼으로 파일을 직접 올려 분석도 가능합니다 (최대 5개)
+        <div id="view-chat" class="view chat-split">
+          <!-- 좌: 대화·검색 결과 (결과를 눌러도 이 화면을 벗어나지 않는다) -->
+          <div class="chat-main">
+            <div id="chat-log" class="chat-log">
+              <div class="chat-intro">
+                <button id="chat-intro-toggle" class="chat-intro-toggle" type="button" title="안내 접기/펴기">접기</button>
+                <div id="chat-intro-body">
+                  Outlook 메일을 검색하고, 첨부파일(PDF·엑셀·이미지·워드)의 내용을 확인할 수 있습니다.<br><br>
+                  <b>이렇게 물어보세요:</b><br>
+                  • "결제 관련 메일 찾아줘"<br>
+                  • "OO가 보낸 메일 요약해줘"<br>
+                  • "이 메일 요약해줘"<br>
+                  • "PDF 첨부 정리해줘"<br>
+                  • 아래 + 버튼으로 파일을 직접 올려 분석도 가능합니다 (최대 5개)
+                </div>
               </div>
             </div>
+            <div id="pending-files" class="pending-files"></div>
+            <div class="chat-input-bar">
+              <button id="btn-attach" title="파일 첨부 (최대 5개)">+</button>
+              <textarea id="chat-input" rows="1" placeholder="검색어나 질문을 입력하세요 (Enter 전송)"></textarea>
+              <button id="btn-send" class="btn-primary">전송</button>
+            </div>
           </div>
-          <div id="pending-files" class="pending-files"></div>
-          <div class="chat-input-bar">
-            <button id="btn-attach" title="파일 첨부 (최대 5개)">+</button>
-            <textarea id="chat-input" rows="1" placeholder="메일을 검색하거나 질문을 입력하세요... (Enter 전송, Shift+Enter 줄바꿈)"></textarea>
-            <button id="btn-send" class="btn-primary">전송</button>
+          <!-- 우: 읽기창 (미회신·보낸트리와 동일 컴포넌트 재사용) -->
+          <div class="reading-pane" id="chat-reading-pane">
+            <div class="rp-empty" id="chat-rp-empty">
+              <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+              <div>검색 결과를 클릭하면 여기에 내용이 표시됩니다.</div>
+            </div>
+            <div id="chat-rp-content" class="rp-content hidden"></div>
+          </div>
+        </div>
+
+        <!-- ===== 보낸메일 프로젝트 트리 (프로젝트 → 수신인 → 메일) ===== -->
+        <div id="view-sent" class="view sent-wrap">
+          <!-- 상단: 보기 전환 + 요약 칩 -->
+          <div class="sent-topbar">
+            <div class="sent-modes">
+              <button id="btn-sent-grouped" class="mlp-tab active" type="button" title="프로젝트·수신인으로 분류해 보기">분류 보기</button>
+              <button id="btn-sent-list" class="mlp-tab" type="button" title="날짜순 평면 목록으로 보기">목록 보기</button>
+              <span class="mlp-tab-sep"></span>
+              <!-- 분류 축 3종 (분류 보기일 때만 노출) -->
+              <button class="mlp-tab sent-axis-btn active" type="button" data-axis="project" title="프로젝트 → 상대 조직 → 스레드">프로젝트별</button>
+              <button class="mlp-tab sent-axis-btn" type="button" data-axis="date" title="연도 → 월 → 메일">날짜별</button>
+              <button class="mlp-tab sent-axis-btn" type="button" data-axis="event" title="도면·견적·승인·회의·발주 등 제목 키워드로 분류">이벤트·테마별</button>
+            </div>
+            <div id="sent-summary" class="sent-summary"></div>
+            <button id="btn-sent-recompute" class="link-btn" title="제목·스레드 기준으로 프로젝트 다시 판정">다시 분류</button>
+          </div>
+          <div class="sent-split">
+            <div class="sent-tree-pane">
+              <div class="mlp-head"><span>프로젝트 <span id="sent-proj-count" class="fld-count">0</span></span></div>
+              <div id="sent-tree" class="sent-tree"><div class="empty-sm">불러오는 중...</div></div>
+            </div>
+            <div class="sent-list-pane">
+              <div class="mlp-head">
+                <span id="sent-list-title">프로젝트를 선택하세요</span>
+                <span id="sent-list-count" class="fld-count">0</span>
+              </div>
+              <!-- 분류 상태에서도 시간 흐름을 볼 수 있게 정렬 컨트롤을 항상 노출 -->
+              <div class="mlp-bar sent-sort-bar">
+                <div class="mlp-sort">
+                  <label for="sent-sort-by" class="sr-label">기준:</label>
+                  <select id="sent-sort-by" title="정렬 기준">
+                    <option value="date">날짜</option>
+                    <option value="recipient">수신인</option>
+                    <option value="subject">제목</option>
+                  </select>
+                  <button id="sent-sort-dir" class="sort-dir-btn" title="정렬 방향 (내림차순 = 최신 위)" data-dir="desc">▼</button>
+                  <button id="btn-xls-sent" class="xls-btn" title="지금 화면의 보낸 메일 목록을 엑셀로 내보냅니다">엑셀</button>
+                </div>
+              </div>
+              <div id="sent-mail-list" class="mail-list">
+                <div class="empty">왼쪽에서 프로젝트나 수신인을 선택하면 보낸 메일이 표시됩니다.</div>
+              </div>
+            </div>
+            <!-- 우: 읽기창 (미회신 뷰와 동일 컴포넌트 재사용) -->
+            <div class="reading-pane" id="sent-reading-pane">
+              <div class="rp-empty" id="sent-rp-empty">
+                <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></div>
+                <div>메일을 선택하면 여기에 내용이 표시됩니다.</div>
+              </div>
+              <div id="sent-rp-content" class="rp-content hidden"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== 미회신 전용 뷰 ===== -->
+        <!-- ===== 할 일 뷰 (상태별 그룹) — 회신 대기와 같은 2분할 컴포넌트를 재사용 ===== -->
+        <div id="view-todo" class="view fu-split">
+          <div class="fu-list-pane">
+            <div class="fu-head">
+              <span class="fu-title">할 일 <span id="todo-total" class="badge badge-warn">0</span></span>
+              <div class="fu-filters">
+                <button class="fu-btn active" data-tdstate="todo" title="내가 처리해야 하는 메일">할 일 <span data-tdcnt="todo">0</span></button>
+                <button class="fu-btn" data-tdstate="hold" title="지금은 못 하거나 상대 회신 대기">보류 <span data-tdcnt="hold">0</span></button>
+                <button class="fu-btn" data-tdstate="done" title="처리가 끝난 메일">처리 <span data-tdcnt="done">0</span></button>
+                <button class="fu-btn" data-tdstate="fyi" title="내용만 알면 되는 통보성">확인 <span data-tdcnt="fyi">0</span></button>
+                <button id="btn-todo-refresh" class="fu-btn" title="새로고침">↻</button>
+                <button id="btn-xls-todo" class="fu-btn" title="이 목록을 엑셀로 내보냅니다">엑셀</button>
+              </div>
+              <div class="hint-text" style="margin-top:4px;">메일을 고른 뒤 <b>1</b>=할 일 · <b>2</b>=보류 · <b>3</b>=처리 · <b>4</b>=확인 · <b>0</b>=해제 · <b>Ctrl+Z</b>=되돌리기</div>
+            </div>
+            <div id="todo-list" class="fu-list"><div class="empty">불러오는 중...</div></div>
+          </div>
+          <div class="reading-pane" id="todo-reading-pane">
+            <div class="rp-empty" id="todo-rp-empty">
+              <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/><path d="M18 17l2 2 3-4"/></svg></div>
+              <div>메일을 선택하면 여기에 내용이 표시됩니다.</div>
+            </div>
+            <div id="todo-rp-content" class="rp-content hidden"></div>
+          </div>
+        </div>
+
+        <div id="view-followup" class="view fu-split">
+          <!-- 좌: 회신 대기 목록 -->
+          <div class="fu-list-pane">
+            <div class="fu-head">
+              <span class="fu-title">회신 대기 <span id="fu-total" class="badge badge-warn">0</span></span>
+              <div class="fu-filters">
+                <button class="fu-btn active" data-fu="3">3일+</button>
+                <button class="fu-btn" data-fu="7">7일+</button>
+                <button class="fu-btn" data-fu="1">1일+</button>
+                <button id="btn-fu-sort" class="fu-btn" data-fusort="date" title="정렬 기준 전환 (앱을 다시 켜면 날짜 최신순으로 돌아갑니다)">날짜순</button>
+                <button id="btn-fu-refresh" class="fu-btn" title="새로고침">↻</button>
+                <button id="btn-xls-fu" class="fu-btn" title="회신 대기 목록을 엑셀로 내보냅니다">엑셀</button>
+              </div>
+              <input id="fu-sender" type="text" class="fu-sender" placeholder="보낸사람으로 좁히기" />
+            </div>
+            <div id="followup-list" class="fu-list"><div class="empty">불러오는 중...</div></div>
+          </div>
+          <!-- 우: 읽기창 (메일 뷰와 동일 컴포넌트 재사용) -->
+          <div class="reading-pane" id="fu-reading-pane">
+            <div class="rp-empty" id="fu-rp-empty">
+              <div class="rp-empty-ic"><svg viewBox="0 0 24 24" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4M5 4h11l-1.6 3.5L16 11H5"/></svg></div>
+              <div>왼쪽에서 회신 대기 메일을 선택하면 여기에 내용이 표시됩니다.</div>
+              <div class="rp-empty-sub">읽고 바로 <b>답장</b>까지 할 수 있습니다.</div>
+            </div>
+            <div id="fu-rp-content" class="rp-content hidden"></div>
+          </div>
+        </div>
+
+        <!-- ===== 업무일지 뷰 ===== -->
+        <div id="view-worklog" class="view scroll-view">
+          <header class="view-header">
+            <h1>업무일지</h1>
+            <p class="hint">메일 기록을 근거로 날짜별 "한 일 / 접수한 요청 / 미결 사항"을 정리합니다. 보낸 메일은 내가 처리한 일로 봅니다.</p>
+          </header>
+          <div class="briefing-bar">
+            <span>기간:</span>
+            <button class="wl-btn" data-wl="today">오늘</button>
+            <button class="wl-btn" data-wl="yesterday">어제</button>
+            <button class="wl-btn active" data-wl="week">최근 7일</button>
+            <button class="wl-btn" data-wl="month">최근 30일</button>
+            <button id="btn-worklog" class="btn-primary">업무일지 생성</button>
+            <button id="btn-worklog-copy">복사</button>
+            <button id="btn-worklog-history">지난 기록</button>
+          </div>
+          <div id="worklog-result" class="briefing-result">
+            <div class="empty">기간을 고르고 <b>업무일지 생성</b>을 누르세요.</div>
           </div>
         </div>
 
@@ -212,6 +711,7 @@
             <div class="search-row">
               <input id="contact-search" type="text" placeholder="이름/이메일/회사 검색" />
               <button id="btn-contact-search" class="btn-primary">검색</button>
+              <button id="btn-contact-sort" data-csort="recent" title="정렬 기준 전환 (앱을 다시 켜면 최근 연락순으로 돌아갑니다)">최근 연락순</button>
               <button id="btn-contact-import">Outlook에서 가져오기</button>
             </div>
           </header>
@@ -224,19 +724,23 @@
         <div id="view-settings" class="view scroll-view">
           <header class="view-header">
             <h1>설정</h1>
-            <p class="hint">Cerebras API 키를 최대 5개까지 입력하세요. 앞 키가 실패하면 자동으로 다음 키를 사용합니다.</p>
+            <p class="hint">위에서 고른 제공자의 API 키를 입력하세요(최대 7개). 앞 키가 실패하면 자동으로 다음 키를 사용합니다. 키는 제공자별로 따로 저장되므로 제공자를 바꿔도 기존 키가 지워지지 않습니다.</p>
           </header>
 
           <div class="settings-card">
-            <h2>API 키 (최대 5개)</h2>
-            <div class="key-inputs">
-              <label>키 1 <input type="password" class="api-key" data-idx="0" placeholder="csk-..." /></label>
-              <label>키 2 <input type="password" class="api-key" data-idx="1" placeholder="csk-... (선택)" /></label>
-              <label>키 3 <input type="password" class="api-key" data-idx="2" placeholder="csk-... (선택)" /></label>
-              <label>키 4 <input type="password" class="api-key" data-idx="3" placeholder="csk-... (선택)" /></label>
-              <label>키 5 <input type="password" class="api-key" data-idx="4" placeholder="csk-... (선택)" /></label>
+            <h2>AI 제공자 (여러 개 등록 · 자동 전환)</h2>
+            <p class="hint">제공자를 <b>2개 이상 등록</b>해 두면, 1순위가 막혀도(한도 소진·키 오류·서버 오류) 다음 순위로 <b>자동 전환</b>됩니다.
+              제공자를 고르면 주소·기본 모델이 자동으로 채워집니다 — 키만 넣으세요. 키는 제공자마다 따로 저장됩니다.</p>
+            <div id="ai-chain" class="ai-chain"></div>
+            <div class="ai-chain-bar">
+              <button id="btn-chain-add" type="button" title="제공자를 하나 더 등록합니다">+ 제공자 추가</button>
+              <button id="btn-chain-test" class="btn-primary btn-sm" type="button" title="등록된 모든 제공자·키를 실제로 호출해 확인합니다">전체 연결 테스트</button>
+              <span id="key-check-summary" class="key-check-summary">등록한 제공자를 확인하려면 [전체 연결 테스트]를 누르세요.</span>
             </div>
-            <label class="show-keys"><input type="checkbox" id="toggle-keys" /> 키 표시</label>
+            <div id="key-check-rows" class="key-check-rows"></div>
+            <div class="ai-usage-head">오늘 사용량 <button id="btn-usage-refresh" class="link-btn" type="button" title="사용량을 다시 읽습니다">새로고침</button></div>
+            <div id="ai-usage" class="ai-usage">아직 호출 기록이 없습니다.</div>
+            <datalist id="ai-model-list"></datalist>
           </div>
 
           <div class="settings-card">
@@ -252,6 +756,15 @@
               <button id="btn-pick-pst">찾기</button>
             </div>
             <div id="conn-status" class="conn-status"></div>
+          </div>
+
+          <div class="settings-card">
+            <h2>PST · 데이터 파일 관리
+              <button id="btn-pst-refresh" class="link-btn tree-reload">새로고침</button>
+            </h2>
+            <p class="hint" style="margin-bottom:10px;">Outlook에 연결된 데이터 파일 현황입니다. 수집할 아카이브를 고를 수 있습니다.</p>
+            <div id="pst-stores" class="pst-table"><div class="empty-sm">확인 중...</div></div>
+            <div class="hint-text">※ PST 파일 추가·제거·압축은 Outlook 원본을 바꾸는 작업이라 Bmail에서는 하지 않습니다. Outlook의 [파일 → 계정 설정 → 데이터 파일]에서 진행하세요.</div>
           </div>
 
           <div class="settings-card">
@@ -271,22 +784,150 @@
           <div class="settings-card">
             <h2>실시간 새 메일</h2>
             <label class="inline-check"><input type="checkbox" id="realtime-toggle" checked /> 새 메일 자동 확인 (Outlook 모드)</label>
-            <label class="inline-num">확인 주기(초)
-              <input id="realtime-interval" type="number" min="15" max="600" value="60" />
+            <label class="inline-num">확인 주기
+              <select id="realtime-interval-min">
+                <option value="1">1분</option>
+                <option value="3" selected>3분 (권장)</option>
+                <option value="5">5분</option>
+                <option value="10">10분</option>
+              </select>
             </label>
+            <label class="inline-check"><input type="checkbox" id="startsync-toggle" checked /> 앱 시작할 때 새 메일 1회 자동 확인 (증분 — 몇 초)</label>
+            <label class="inline-check"><input type="checkbox" id="notify-toggle" checked /> 새 메일 데스크톱 알림 (클릭하면 해당 메일 열림)</label>
+            <h3 style="margin:14px 0 6px;font-size:13px;">항상 최신 상태 유지</h3>
+            <p class="hint" style="margin-bottom:8px;">새 메일뿐 아니라 Outlook 쪽 변경(<b>읽음 처리·폴더 이동·범주·깃발·삭제</b>)까지 위 주기마다 자동 반영합니다. 바뀐 폴더만 확인하므로 가볍고, 보고 있던 위치·선택·펼침 상태는 그대로 유지됩니다. (F5 또는 Ctrl+R 로 즉시 갱신)</p>
+            <label class="inline-check"><input type="checkbox" id="autorefresh-toggle" checked /> Outlook 변경 자동 반영</label>
+            <label class="inline-check"><input type="checkbox" id="deferbusy-toggle" checked /> PC 사용 중에는 무거운 갱신을 다음 주기로 미루기</label>
+            <label class="inline-check"><input type="checkbox" id="focusrefresh-toggle" checked /> 창을 다시 볼 때 즉시 한 번 갱신</label>
           </div>
 
           <div class="settings-card">
             <h2>분석 엔진</h2>
             <select id="model-select">
-              <option value="llama-3.3-70b">llama-3.3-70b (권장·가장 안정적)</option>
-              <option value="llama3.1-8b">llama3.1-8b (빠름)</option>
-              <option value="qwen-3-32b">qwen-3-32b</option>
+              <option value="gpt-oss-120b">gpt-oss-120b (권장·가장 강력)</option>
+              <option value="gemma-4-31b">gemma-4-31b (빠름)</option>
+              <option value="zai-glm-4.7">zai-glm-4.7</option>
             </select>
             <h2 style="margin-top:18px;">동기화 시 불러올 최대 메일 수</h2>
-            <input id="max-mails" type="number" min="10" max="20000" value="2000" />
+            <input id="max-mails" type="number" min="10" max="50000" value="5000" />
             <h2 style="margin-top:18px;">동기화 시 첨부(도면 등) 자동 저장</h2>
             <label class="inline-check"><input type="checkbox" id="save-attach-toggle" checked /> 첨부파일을 로컬에 자동 저장하고 텍스트 추출</label>
+            <h2 style="margin-top:18px;">하위 폴더 포함 수집</h2>
+            <label class="inline-check"><input type="checkbox" id="subfolder-toggle" checked /> 받은편지함·보낸편지함의 하위 폴더(업무별 분류)까지 수집</label>
+            <h2 style="margin-top:18px;">상대 조직 사전
+              <button id="btn-org-rebuild" class="link-btn tree-reload" title="주소록·도메인으로 다시 만들기">다시 구축</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">보낸메일을 상대 조직 단위로 묶는 데 씁니다. 조직명을 고쳐 저장하면 그 값이 우선됩니다.</p>
+            <div id="org-coverage" class="hint-text"></div>
+            <div id="org-dict" class="pst-table"><div class="empty-sm">확인 중...</div></div>
+            <h2 style="margin-top:18px;">메일 서명</h2>
+            <label class="inline-check"><input type="checkbox" id="sig-toggle" checked /> 새 메일·답장에 Outlook 서명을 그대로 적용 (글꼴·색·로고 포함)</label>
+            <label class="inline-num">사용할 서명
+              <select id="sig-select"><option value="">Outlook 기본 서명 따름</option></select>
+            </label>
+            <div id="sig-info" class="hint-text">서명 확인 중...</div>
+            <h2 style="margin-top:18px;">Outlook 규칙 반영
+              <button id="btn-rules-import" class="link-btn" title="Outlook 규칙(발신자·제목 → 폴더)을 읽어 프로젝트 분류에 반영합니다">규칙 가져오기</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">Outlook 에 이미 만들어 둔 분류 규칙을 읽어(읽기 전용) 보낸메일 프로젝트 판정에 씁니다. 규칙을 고치거나 지우지 않습니다.</p>
+            <div id="rules-info" class="hint-text">아직 가져오지 않았습니다.</div>
+
+            <h2 style="margin-top:18px;">Outlook 잔여 데이터 수집
+              <button id="btn-extras-import" class="link-btn" title="범주·깃발·캘린더 일정·작업·검색폴더를 Outlook 에서 읽어옵니다(읽기 전용)">가져오기</button>
+              <button id="btn-extras-refresh" class="link-btn" title="현재 저장 현황만 다시 계산">현황 새로고침</button>
+              <button id="btn-extras-retry" class="link-btn" title="'원본 조회 불가'로 접어 둔 메일까지 처음부터 다시 시도합니다">조회 불가분 재시도</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">범주(이름·색)·깃발/후속작업·캘린더 일정(지난 6개월~향후 6개월, 반복 일정 포함)·작업·중요도·읽음상태·검색폴더를 가져옵니다. <b>Outlook 원본은 읽기만 하며 절대 변경하지 않습니다.</b> 일정·작업은 기존 일정 화면에, 깃발은 회신 대기에 합쳐 보여 주고 출처를 표시합니다.</p>
+            <div id="extras-report" class="pst-table"><div class="empty-sm">아직 가져오지 않았습니다.</div></div>
+
+            <h2 style="margin-top:18px;">첨부 분류
+              <button id="btn-attach-reclassify" class="link-btn" title="서명 로고·본문 삽입 이미지를 진짜 첨부와 분리합니다">다시 분류</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">메일 명함(서명 로고)이나 본문에 박힌 그림이 첨부파일로 잡히던 문제를 해결합니다. 판정 기준은 Outlook의 cid 참조·첨부 플래그이며, PDF·도면·오피스 문서는 크기와 무관하게 항상 진짜 첨부로 둡니다.</p>
+            <div id="attach-stats" class="hint-text">확인 중...</div>
+
+            <h2 style="margin-top:18px;">대용량 첨부 (bigmail)</h2>
+            <p class="hint" style="margin-bottom:8px;">파일을 올려 다운로드 링크를 메일 본문에 넣습니다. 한 번에 보낼 수 있는 총 용량은 100MB이며(실측: 105MB는 서버가 413으로 거부), 넘으면 나눠서 올려 주세요.</p>
+            <label class="inline-num">서버 주소 <input id="bm-base" type="text" class="bm-input" placeholder="https://bigmail.sedms.app" /></label>
+            <label class="inline-num">라이선스 키 <input id="bm-key" type="text" class="bm-input" placeholder="BM-INT-WEAR-S001" /></label>
+            <label class="inline-num">기본 보관 기간
+              <select id="bm-expire">
+                <option value="1">1일</option>
+                <option value="3">3일</option>
+                <option value="7" selected>7일</option>
+                <option value="14">14일</option>
+                <option value="30">30일</option>
+                <option value="90">90일</option>
+              </select>
+            </label>
+            <h3 style="margin-top:12px;font-size:13px;">대용량 전송 이력
+              <button id="btn-bm-history-refresh" class="link-btn">새로고침</button>
+            </h3>
+            <div id="bm-history" class="bm-history"><div class="empty-sm">확인 중...</div></div>
+
+            <h2 style="margin-top:18px;">첨부 정리 이력</h2>
+            <p class="hint" style="margin-bottom:8px;">AI 대화창에서 "OO에 정리해줘"로 실행한 첨부 정리 기록입니다. 대화창에 "정리 이력"이라고 입력해도 같은 목록을 볼 수 있습니다.</p>
+            <h3 style="margin-top:0;font-size:13px;">
+              <button id="btn-org-history-refresh" class="link-btn">새로고침</button>
+            </h3>
+            <div id="org-history" class="bm-history"><div class="empty-sm">확인 중...</div></div>
+
+            <h2 style="margin-top:18px;">일일 브리핑 자동 생성</h2>
+            <label class="inline-check"><input type="checkbox" id="autodaily-toggle" /> 앱을 열 때 오늘 브리핑을 자동으로 생성 (AI 사용량 증가)</label>
+            <h2 style="margin-top:18px;">AI 동시 처리 수</h2>
+            <label class="inline-num">대량 분석 시 동시 실행
+              <select id="ai-concurrency">
+                <option value="1">1개 (가장 안전)</option>
+                <option value="2">2개</option>
+                <option value="3" selected>3개 (권장·가장 빠름)</option>
+              </select>
+            </label>
+            <div class="hint-text">API 키를 서로 다르게 배정해 동시에 처리합니다. 키별 분당 한도가 독립이라 동시 처리로 시간이 줄어듭니다.</div>
+            <h2 style="margin-top:18px;">메일 열면 자동 분석</h2>
+            <label class="inline-check"><input type="checkbox" id="autoanalyze-toggle" /> 메일을 열 때 저장된 분석이 없으면 자동으로 번역/분석 실행 (AI 사용량 증가)</label>
+            <h2 style="margin-top:18px;">로컬 저장물 정리
+              <button id="btn-cleanup-scan" class="link-btn" title="지울 수 있는 것을 찾아 보고만 합니다 (아무것도 지우지 않습니다)">지금 점검</button>
+              <button id="btn-cleanup-apply" class="link-btn" title="점검 결과대로 실제로 지웁니다">정리 실행</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">이 앱이 로컬에 저장한 첨부 사본과 오래된 내보내기 파일만 다룹니다. <b>Outlook 원본과 메일 데이터는 절대 건드리지 않습니다.</b> 자동 점검은 업무시간(09~18시) 매시 정각에 <b>별도 프로세스</b>로 돌며 <b>보고만</b> 합니다 — 자동으로 지우는 일은 없습니다.</p>
+            <label class="inline-check"><input type="checkbox" id="cleanup-auto" checked /> 업무시간 자동 점검 (메모리 상한 400MB, 넘으면 즉시 중단)</label>
+            <label class="inline-num">내보내기 파일 보관 <input id="cleanup-keepdays" type="number" min="1" max="3650" value="30" /> 일 (지난 것은 정리 대상)</label>
+            <div id="cleanup-report" class="hint-text">아직 점검하지 않았습니다.</div>
+
+            <h2 style="margin-top:18px;">메일 처리 상태 (할 일 / 보류 / 처리 / 확인)
+              <button id="btn-action-clear-auto" class="link-btn" title="Outlook 깃발에서 자동으로 매핑된 상태만 지웁니다(직접 지정한 건 유지)">자동 매핑분 초기화</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">상태 지정은 <b>메일 우클릭</b>·<b>읽기창 버튼</b>·<b>단축키 1~4</b>(0=해제, Ctrl+Z=되돌리기)로 합니다. 목록 위 색 칩은 <b>보기 필터 전용</b>이며 상태를 바꾸지 않습니다.</p>
+            <div id="action-source-info" class="hint-text"></div>
+
+            <h2 style="margin-top:18px;">프로젝트 분류 범위
+              <button id="btn-proj-recompute-all" class="link-btn" title="받은 메일까지 포함해 전체를 다시 분류합니다 (30초쯤 걸립니다)">전체 메일 다시 분류</button>
+            </h2>
+            <p class="hint" style="margin-bottom:8px;">기본 분류는 보낸 메일만 대상으로 합니다. 받은 메일은 <b>들어 있는 폴더 이름</b>이 곧 프로젝트이므로, 전체를 다시 분류하면 대시보드의 프로젝트 축이 제대로 채워집니다. <span class="hint-text">(실측: 미분류 '기타' 20,101건 → 1,435건)</span></p>
+
+            <h2 style="margin-top:18px;">프로젝트 활동성 구간</h2>
+            <p class="hint" style="margin-bottom:8px;">모든 목록은 <b>날짜 최신순</b>이 기본이며, 프로젝트·조직·스레드 같은 그룹은 <b>마지막 활동일 최신순</b>으로 정렬합니다. 아래 기준으로 진행 중인 프로젝트를 항상 위에 둡니다.</p>
+            <label class="inline-num">진행 중 기준 <input id="proj-active-days" type="number" min="7" max="3650" value="90" /> 일 이내 활동</label>
+            <label class="inline-num">최근 기준 <input id="proj-recent-days" type="number" min="30" max="7300" value="365" /> 일 이내 활동 (초과 시 “지난 프로젝트”로 접힘)</label>
+
+            <h2 style="margin-top:18px;">AI 답장 언어</h2>
+            <label class="inline-num">답장 초안을 쓸 언어
+              <select id="reply-lang">
+                <option value="auto">원문 따름 (기본·권장)</option>
+                <option value="ko">항상 한국어</option>
+                <option value="en">항상 영어</option>
+              </select>
+            </label>
+            <div class="hint-text">“원문 따름”은 상대가 이번에 쓴 <b>새 본문</b>만 보고 판정합니다(아래 인용된 영문 원문은 무시). 지시사항에 “영어로”·“한국어로”라고 적으면 그 지시가 언제나 최우선입니다.</div>
+            <h2 style="margin-top:18px;">AI 분석 교차 검증</h2>
+            <label class="inline-check"><input type="checkbox" id="crossvalidate-toggle" checked /> 번역/분석 시 등록된 제공자 2곳으로 병렬 호출해 결과를 대조 (AI 사용량 약 2배)</label>
+            <div class="hint-text">기한·요청 유무·할 일 개수·발신자 의도가 두 결과에서 같으면 "일치" 배지를, 다르면 "확인 필요" 배지와 차이를 표시합니다. 등록된 제공자가 1개뿐이면 자동으로 단일 결과로 동작합니다.</div>
+            <h2 style="margin-top:18px;">주소록 자동 연동</h2>
+            <label class="inline-check"><input type="checkbox" id="autocontacts-toggle" checked /> 동기화할 때 Outlook 주소록을 자동으로 가져오기 (메일 발신자는 항상 자동 축적)</label>
+            <h2 style="margin-top:18px;">아카이브 PST 포함 수집</h2>
+            <label class="inline-check"><input type="checkbox" id="archive-toggle" /> Outlook에 추가로 연결된 아카이브 PST까지 수집 (건수가 많아 오래 걸립니다)</label>
+            <div id="archive-stores" class="hint-text">아카이브 스토어 확인 중...</div>
+            <div class="hint-text">※ 아카이브는 오래된 메일이 대부분이므로 위 <b>기간</b>을 “전체”로 두어야 수집됩니다.</div>
           </div>
 
           <div class="settings-card">
@@ -298,6 +939,9 @@
               <div class="admin-row"><span class="admin-k">전문검색(FTS)</span><span class="admin-v" id="admin-fts">-</span></div>
               <div class="admin-row"><span class="admin-k">저장된 메일</span><span class="admin-v" id="admin-mailcount">-</span></div>
               <div class="admin-row"><span class="admin-k">마지막 동기화</span><span class="admin-v" id="admin-lastsync">-</span></div>
+              <div class="admin-row"><span class="admin-k">수신/참조 구분</span><span class="admin-v" id="admin-tome">-</span></div>
+              <div class="admin-row"><span class="admin-k">Outlook 계정</span><span class="admin-v" id="admin-accounts">-</span></div>
+              <div class="admin-row"><span class="admin-k">Outlook 서명</span><span class="admin-v" id="admin-signature">-</span></div>
             </div>
             <div class="admin-actions">
               <button id="btn-admin-testconn">연결 테스트</button>
@@ -308,16 +952,76 @@
 
           <div class="settings-actions">
             <button id="btn-save-settings" class="btn-primary">저장</button>
-            <button id="btn-check-update">업데이트 확인</button>
             <span id="settings-saved" class="saved-msg hidden">저장되었습니다</span>
           </div>
         </div>
 
       </section>
+          <!-- ===================== 첨부 미리보기 패널 ===================== -->
+    <!-- 첨부를 외부 프로그램으로 띄우지 않고 앱 안에서 본다(읽기창 오른쪽 도킹) -->
+    <aside id="att-preview" class="att-preview hidden" aria-label="첨부 미리보기">
+      <div class="ap-head">
+        <button id="ap-prev" class="ap-nav" type="button" title="이전 첨부">◀</button>
+        <button id="ap-next" class="ap-nav" type="button" title="다음 첨부">▶</button>
+        <span id="ap-title" class="ap-title">첨부 미리보기</span>
+        <span id="ap-meta" class="ap-meta"></span>
+        <span class="ap-actions">
+          <button id="ap-open" type="button" title="기본 프로그램으로 열기">기본 프로그램</button>
+          <button id="ap-save" type="button" title="다른 이름으로 저장(복사)">저장</button>
+          <button id="ap-folder" type="button" title="파일이 있는 폴더 열기">폴더</button>
+          <button id="ap-close" type="button" title="닫기 (Esc)">닫기</button>
+        </span>
+      </div>
+      <div id="ap-body" class="ap-body"></div>
+    </aside>
+
+</div>
+  </div>
+
+  <!-- 우클릭 컨텍스트 메뉴 (폴더/메일 공용) -->
+  <div id="ctx-menu" class="ctx-menu hidden" role="menu"></div>
+
+  <!-- 도움말 모달 -->
+  <div id="help-modal" class="modal-backdrop hidden">
+    <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="help-title">
+      <div class="modal-head">
+        <h2 id="help-title">Bmail 도움말</h2>
+        <button id="help-close" class="modal-x" title="닫기">×</button>
+      </div>
+      <div class="modal-body">
+        <h3>주요 기능</h3>
+        <ul>
+          <li><b>동기화</b> — Outlook의 받은/보낸편지함과 하위 폴더(설정에 따라 아카이브 PST까지)를 읽어 로컬 DB에 저장·색인합니다.</li>
+          <li><b>메일 검색</b> — "OO가 보낸 OO 관련 메일 찾아줘"처럼 한국어로 물으면 실제 저장된 메일을 근거 목록으로 함께 보여줍니다.</li>
+          <li><b>번역/분석</b> — 선택한 메일을 한국어로 번역하고 요점·마감·액션을 정리합니다.</li>
+          <li><b>답장 초안</b> — 원문 언어에 맞춰 답장 초안을 작성합니다. 지시사항 칸에 요구사항을 적을 수 있습니다.</li>
+          <li><b>요약</b> — 기간(오늘/7일/30일) 내 메일을 종합해 스케줄·처리한 일·놓친 일을 정리합니다.</li>
+          <li><b>미회신 경고</b> — 대시보드에서 받았지만 답장하지 않은 대화를 오래된 순으로 보여줍니다.</li>
+          <li><b>주소록</b> — 동기화할 때 Outlook 연락처와 메일 발신자가 자동으로 축적됩니다.</li>
+        </ul>
+        <h3>메뉴 탭</h3>
+        <ul>
+          <li><b>파일</b> 설정·진단·첨부 폴더 · <b>홈</b> 기본 명령 · <b>보내기/받기</b> 동기화</li>
+          <li><b>폴더</b> 폴더 창·폴더별 통계 · <b>보기</b> 화면 전환·대화별 보기 · <b>도움말</b> 이 창</li>
+        </ul>
+        <h3>단축키</h3>
+        <ul>
+          <li><b>Enter</b> — 검색 실행 / 채팅 전송</li>
+          <li><b>Shift + Enter</b> — 채팅 입력 줄바꿈</li>
+          <li><b>Esc</b> — 이 도움말 닫기</li>
+        </ul>
+        <h3>알아두기</h3>
+        <ul>
+          <li>이 앱은 <b>읽기 전용</b>입니다. 메일 발송·삭제·일정 등록은 하지 않습니다.</li>
+          <li>모든 데이터는 이 PC에만 저장됩니다(설정 → 관리자 정보에서 DB 경로 확인).</li>
+        </ul>
+      </div>
     </div>
   </div>
 
   <!-- 로딩 오버레이 -->
+  <!-- AI 제공자 자동 전환 알림 -->
+  <div id="ai-toast" class="ai-toast hidden" role="status" aria-live="polite"></div>
   <div id="loading" class="loading hidden">
     <div class="spinner"></div>
     <div id="loading-text">처리 중...</div>

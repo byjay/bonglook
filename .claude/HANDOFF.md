@@ -35,6 +35,13 @@
 - 백엔드 선택지: (A) OpenRouter 크레딧 충전 후 API (B) **JevK5 로컬 자가호스팅**(Apache-2.0, Qwen3.5-4B+LoRA, /v1/systemone 호환, GTX1660S 6GB 적재 가능 추정 — 무료·메일 외부전송 0) → **마스터 결정(2026-09-28): (B) JevK5 로컬.** 모델 다운로드 승인 포함. OpenRouter Jev API 는 사용 안 함(잔액 음수 방지).
    진행 순서(발주 1건씩): ① 현 OpenRouter 교체 발주 완료 대기 → ② scout: JevK5 실행 방법·크기·요구사양·GTX1660S 6GB 적재 가능 여부·Windows 구동 경로 조사 → ③ coder: 로컬 서버 기동 + Jev 어댑터(백엔드 교체 가능 구조, /v1/systemone 호환) + FILEMAP.md 생성 → ④ 한국어 20건+ LLM 대조 일치율·폴백률·지연 실측 → 통과 대상만 본적용.
 
+## JevK5 정찰 결과 (2026-09-28, scout — 지휘자 검토 반영)
+- 런타임 `allebee/jevk5` v0.3.0(Python, Apache-2.0), 모델 HF `alibiserikbay/JevK5`(4B)·`JevK5-9B`·`JevK5-GGUF`. `/v1/systemone` 호환.
+- 로컬 환경: Python 3.11/3.13 · uv 0.11.1 · nvidia-smi OK · E: 977GB 여유. Ollama 는 logprobs 미제공 → **Ollama 경로 불가**.
+- 🔴 **JevK5 는 "English-only" 명시** — 한국어 메일 대상이라 최대 위험. API Jev 한국어 1건도 전부 p<0.70 였음.
+- 지휘자 정정: 정찰의 "4B 6GB 불가"는 bf16 기준. **GGUF Q5(~3GB)는 GPU 적재 가능성 높음 → 실측**. "다운로드 6GB"는 저장소 전체 기준 → **필요 양자화 파일 1개만** 받는다. "CPU 100ms" 는 미검증.
+- 진행: **작게 시작 — ③-a 설치·기동·한국어 사전판정(5건)** 으로 가부 먼저 확인 → 통과 시 ③-b 어댑터+20건 실측. 한국어 부적합이면 **영어 특징 상태(state)** 방식(한국어는 규칙으로 구조화 특징 추출 → 영어 state 로 Jev 판정)을 대안으로 함께 측정.
+
 ## 문서 부트스트랩 (2026-09-28)
 - `CLAUDE.md`(정체 카드) 신설, `ECOSYSTEM_START_GUIDE.md` §14 레지스트리 1줄 등록. FILEMAP.md 미생성(다음 발주에서 `_warehouse/05-scripts-build/filemap.mjs` 로 생성).
 
