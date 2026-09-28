@@ -127,7 +127,9 @@ function orderCounts(counts) {
 module.exports = {
   STATES, META, COLORS,
   isState, normalizeState, labelOf, colorOf, isOpen, isClosed,
-  suggest, suggestText, orderCounts
+  suggest, suggestText, orderCounts,
+  // 🔴 측정용 export(2026-09-28, jev-measure2.mjs) — 기존 규칙 재사용(SoT), 정규식 복제 금지
+  NOREPLY_RE, NEWSLETTER_RE, REQUEST_RE, INFORM_RE, CLOSED_RE
 };
 
 // ============================================================
