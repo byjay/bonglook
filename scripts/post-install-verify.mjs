@@ -14,14 +14,17 @@
 //  종료코드: 0 정상 / 1 문제 있음(--fix 로 못 고친 경우)
 // ============================================================
 import { existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
+import { DEFAULT_INSTALL_DIR, junctionTarget, samePath } from './install-dir.mjs';
 
 const FIX = process.argv.includes('--fix');
 const APP_NAME = 'Bmail';
-const INSTALL_DIR = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Programs', 'outlook-ai-assistant');
+const INSTALL_DIR = DEFAULT_INSTALL_DIR;
 const EXE = join(INSTALL_DIR, `${APP_NAME}.exe`);
+// 기본 경로가 정션이면(설치본 이전 PC) NSIS 는 바로가기를 실제 폴더 경로로 만든다 → 둘 다 정상.
+const REAL_EXE = join(junctionTarget(INSTALL_DIR) || INSTALL_DIR, `${APP_NAME}.exe`);
 const DESKTOP_LNK = join(homedir(), 'Desktop', `${APP_NAME}.lnk`);
 const START_LNK = join(process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'),
   'Microsoft', 'Windows', 'Start Menu', 'Programs', `${APP_NAME}.lnk`);
@@ -49,7 +52,7 @@ function makeLnk(lnkPath, target) {
     `$w = New-Object -ComObject WScript.Shell`,
     `$s = $w.CreateShortcut('${lnkPath.replace(/'/g, "''")}')`,
     `$s.TargetPath = '${target.replace(/'/g, "''")}'`,
-    `$s.WorkingDirectory = '${INSTALL_DIR.replace(/'/g, "''")}'`,
+    `$s.WorkingDirectory = '${dirname(target).replace(/'/g, "''")}'`,
     `$s.IconLocation = '${target.replace(/'/g, "''")}, 0'`,
     `$s.Description = 'Bmail - 메일 검색·요약·번역·답장 초안'`,
     `$s.Save()`
@@ -76,21 +79,21 @@ for (const [name, lnk] of [['바탕화면', DESKTOP_LNK], ['시작메뉴', START
   const target = lnkTarget(lnk);
   if (!existsSync(lnk)) {
     if (FIX) {
-      try { makeLnk(lnk, EXE); ok(`${name} 바로가기 없음 → 새로 만들었다`); }
+      try { makeLnk(lnk, REAL_EXE); ok(`${name} 바로가기 없음 → 새로 만들었다`); }
       catch (e) { bad(`${name} 바로가기 없음 · 생성 실패: ${e.message}`); }
     } else bad(`${name} 바로가기 없음 (${lnk}) — --fix 로 복구 가능`);
     continue;
   }
   if (!target || !existsSync(target)) {
     if (FIX) {
-      try { makeLnk(lnk, EXE); ok(`${name} 바로가기 대상이 깨져 있어 고쳤다 (→ ${EXE})`); }
+      try { makeLnk(lnk, REAL_EXE); ok(`${name} 바로가기 대상이 깨져 있어 고쳤다 (→ ${REAL_EXE})`); }
       catch (e) { bad(`${name} 대상 깨짐 · 복구 실패: ${e.message}`); }
     } else bad(`${name} 바로가기 대상이 없다: ${target || '(빈 값)'} — --fix 로 복구 가능`);
     continue;
   }
-  if (target.toLowerCase() !== EXE.toLowerCase()) {
+  if (!samePath(target, EXE) && !samePath(target, REAL_EXE)) {
     if (FIX) {
-      try { makeLnk(lnk, EXE); ok(`${name} 바로가기가 엉뚱한 곳을 가리켜 고쳤다`); }
+      try { makeLnk(lnk, REAL_EXE); ok(`${name} 바로가기가 엉뚱한 곳을 가리켜 고쳤다`); }
       catch (e) { bad(`${name} 대상 불일치 · 복구 실패: ${e.message}`); }
     } else bad(`${name} 대상 불일치: ${target}`);
     continue;

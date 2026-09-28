@@ -8,21 +8,32 @@
 //   (자동화 세션에서는 그 창을 누를 사람이 없어 설치가 영원히 안 끝난다)
 //   → 항상 ① 실행 중인 앱을 정상 종료하고 ② NSIS 무인 스위치 /S 로 설치한다.
 //
-//  사용: node scripts/install-silent.mjs [--no-relaunch]
+//  사용: node scripts/install-silent.mjs [--no-relaunch] [--dir=<설치폴더>]
 //  종료코드: 0 성공 / 1 실패
+//
+//  ★ 2026-09-29 설치 위치 이전(정션) 대응
+//   기본 설치 경로(%LOCALAPPDATA%\Programs\outlook-ai-assistant)를 다른 드라이브로 옮기고
+//   그 자리에 NTFS 정션을 두면, NSIS 가 구버전 제거 시 정션을 지우고 기본 경로에 실제 폴더를
+//   새로 만들어 설치한다(실측: 정션 소멸 + 원래 드라이브에 350MB 재생성).
+//   → 설치 폴더 = ① --dir= ② 환경변수 BMAIL_INSTALL_DIR ③ 기본 경로가 정션이면 그 대상.
+//     지정되면 NSIS 에 /D=<폴더> 로 넘기고, 설치 후 기본 경로를 그 폴더로 향하는 정션으로 복구한다
+//     (바로가기·verify 스크립트의 기본 경로 호환). 아무것도 없으면 기존 동작(기본 경로) 그대로.
 // ============================================================
-import { existsSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, statSync, readdirSync, rmdirSync } from 'node:fs';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawn } from 'node:child_process';
-import { homedir } from 'node:os';
+import { DEFAULT_INSTALL_DIR as DEFAULT_DIR, junctionTarget, samePath } from './install-dir.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SETUP = join(ROOT, 'release', 'Bmail-Setup-1.0.0.exe');
-const INSTALL_DIR = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'),
-  'Programs', 'outlook-ai-assistant');
-const EXE = join(INSTALL_DIR, 'Bmail.exe');
 const RELAUNCH = !process.argv.includes('--no-relaunch');
+
+const argDir = (process.argv.find((a) => a.startsWith('--dir=')) || '').slice('--dir='.length);
+const TARGET_DIR = (argDir || process.env.BMAIL_INSTALL_DIR || junctionTarget(DEFAULT_DIR) || '').trim() || null;
+const RELOCATED = !!TARGET_DIR && !samePath(TARGET_DIR, DEFAULT_DIR);
+const INSTALL_DIR = RELOCATED ? resolve(TARGET_DIR) : DEFAULT_DIR;
+const EXE = join(INSTALL_DIR, 'Bmail.exe');
 
 const ps = (script) => execFileSync('powershell.exe',
   ['-NoProfile', '-NonInteractive', '-Command', script],
@@ -37,21 +48,26 @@ if (!existsSync(SETUP)) {
 
 console.log('=== 1) 실행 중인 Bmail 정상 종료 ===');
 // CloseMainWindow() 로 창을 정상적으로 닫는다(강제 종료는 그래도 안 죽을 때만).
+// 2026-09-29: 기동 직후 동기화 중에는 10초 안에 안 닫혀 강제 종료된 실측 → 대기 30초로 늘림(DB 보호).
 const wasRunning = ps(`
   $p = Get-Process Bmail -ErrorAction SilentlyContinue
   if (-not $p) { 'none'; exit }
   $n = @($p).Count
-  foreach ($x in $p) { try { $null = $x.CloseMainWindow() } catch {} }
-  for ($i=0; $i -lt 20; $i++) {
+  $win = 0
+  foreach ($x in $p) { try { if ($x.CloseMainWindow()) { $win++ } } catch {} }
+  for ($i=0; $i -lt 60; $i++) {
     Start-Sleep -Milliseconds 500
     if (-not (Get-Process Bmail -ErrorAction SilentlyContinue)) { break }
   }
   $left = Get-Process Bmail -ErrorAction SilentlyContinue
-  if ($left) { $left | Stop-Process -Force; Start-Sleep -Seconds 2; "killed:$n" } else { "closed:$n" }
+  if ($left) { $ids = ($left | % Id) -join ','; $left | Stop-Process -Force; Start-Sleep -Seconds 2; "killed:$n (창닫기 요청 성공 $win · 30초 후 잔존 $ids)" } else { "closed:$n" }
 `);
 console.log(`  ${wasRunning === 'none' ? '실행 중 아님' : wasRunning}`);
 
+// NSIS 규칙: /D= 는 반드시 마지막 인자, 따옴표 없이(공백 포함 경로도 그대로).
+const SETUP_ARGS = RELOCATED ? `/S /D=${INSTALL_DIR}` : '/S';
 console.log('=== 2) 무인 설치 (/S) ===');
+console.log(`  설치 폴더: ${INSTALL_DIR}${RELOCATED ? ` (이전됨 · 기본 경로 ${DEFAULT_DIR} 는 정션으로 유지)` : ''}`);
 console.log(`  설치 전 Bmail.exe: ${mtime(EXE)}`);
 //  ★ 2026-08-25 사고: 앱을 방금 닫아도 exe/DLL 파일 잠금이 즉시 풀리지 않을 때가 있고
 //    (백신 스캔·핸들 반환 지연), 이 상태에서 NSIS 가 "Failed to uninstall old application
@@ -84,7 +100,7 @@ const runSetup = () => {
   //  -Wait 로 잡히지 않는 UAC 재실행 자식 프로세스까지 대비해, 종료 후에도
   //  동일 이름 프로세스가 남아 있으면 화면에 뜬 대화상자로 간주하고 강제 종료한다.
   const c = Number(ps(`
-    $p = Start-Process -FilePath '${SETUP}' -ArgumentList '/S' -PassThru -Wait
+    $p = Start-Process -FilePath '${SETUP}' -ArgumentList '${SETUP_ARGS}' -PassThru -Wait
     Start-Sleep -Milliseconds 500
     $stray = Get-Process 'Bmail-Setup*' -ErrorAction SilentlyContinue
     if ($stray) { $stray | Stop-Process -Force -ErrorAction SilentlyContinue }
@@ -117,6 +133,32 @@ if (code !== 0) {
 console.log('=== 3) 결과 ===');
 console.log(`  설치 후 Bmail.exe: ${mtime(EXE)}`);
 console.log(`  설치 후 app.asar : ${mtime(join(INSTALL_DIR, 'resources', 'app.asar'))}`);
+
+if (RELOCATED) {
+  console.log('=== 3-b) 기본 경로 정션 확인·복구 ===');
+  const same = (t) => samePath(t, INSTALL_DIR);
+  let cur = junctionTarget(DEFAULT_DIR);
+  if (!cur && existsSync(DEFAULT_DIR) && readdirSync(DEFAULT_DIR).length === 0) {
+    // 구버전 제거기가 파일만 지우고 빈 폴더를 남긴다(2026-09-29 실측) — 빈 폴더만 비재귀로 지운다
+    rmdirSync(DEFAULT_DIR);
+    console.log(`  빈 기본 폴더 제거: ${DEFAULT_DIR}`);
+  }
+  if (same(cur)) {
+    console.log(`  정션 유지됨: ${DEFAULT_DIR} -> ${cur}`);
+  } else if (cur || existsSync(DEFAULT_DIR)) {
+    // 다른 곳을 가리키는 정션이거나 내용 있는 실제 폴더 — 자동 삭제하지 않는다(데이터 보호). 실패로 보고.
+    console.error(`  기본 경로에 ${cur ? `다른 정션(-> ${cur})` : '내용 있는 실제 폴더'}가 있다: ${DEFAULT_DIR} — 수동 확인 필요`);
+    process.exit(1);
+  } else {
+    ps(`New-Item -ItemType Junction -Path '${DEFAULT_DIR}' -Target '${INSTALL_DIR}' | Out-Null`);
+    const made = junctionTarget(DEFAULT_DIR);
+    if (!same(made)) {
+      console.error(`  정션 복구 실패: ${DEFAULT_DIR}`);
+      process.exit(1);
+    }
+    console.log(`  정션 복구함: ${DEFAULT_DIR} -> ${made}`);
+  }
+}
 
 if (RELAUNCH) {
   spawn(EXE, [], { detached: true, stdio: 'ignore', windowsHide: false }).unref();
