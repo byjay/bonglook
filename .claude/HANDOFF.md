@@ -1,5 +1,12 @@
 # HANDOFF — Bmail (bonglook)
 
+## 🟢 세션 종료 스냅샷 (2026-09-29, 마스터 "마무리")
+- 상태: 1~5·7·7-1·9 완료. 이전 재검증(지휘자 직접): C: 여유 2.22GB · 실행본 `E:\Apps\outlook-ai-assistant\Bmail.exe` · DB 쓰기 E: · 정션 4개 대상 정상 · 잔여 예약작업 0.
+- Jev 현황: **앱 실경로 미적용**(`src/jev.js` import 는 `jev-server.js` 뿐) · 에이전트 모델 등급은 `jev_route.py` 로 4건 판정해 사용.
+- 다음 착수 후보(마스터 지시 대기, 순서대로 권장): ① reply_needed Jev 보조(0.70~0.90 「추정」, <0.70 LLM 승격) — 20건+ 재측정 후 문턱 통과 시만 ② GPU 유휴 야간 과거메일 일괄분류 ③ wd-checker Jev 적용.
+- 마스터 몫: Docker vhdx 59.9GB 정리(C: 확보) · (선택) OpenRouter 키 교체 · C: 에 25분간 ~0.8GB 쓴 미확인 프로세스(미조사).
+- 미추적 파일: `.claude/launch.json`·`outlook-desktop-2026-07-24-b.tar.gz` — 이 세션 산출물 아님, 손대지 않음.
+
 ## 미완료 (2026-09-28 갱신 — 1~5 완료, 6 대기)
 5. [x] 첨부 내용 분석(PDF·XLSX·DOCX 텍스트 + 이미지는 무료 비전모델) — 2단계 모두 구현·실DB/실API 검증
    완료. 상세: 아래 「5번 완료 상세」 참조.
