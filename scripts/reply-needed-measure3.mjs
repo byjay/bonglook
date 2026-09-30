@@ -25,8 +25,10 @@ const replyNeeded = require(join(ROOT, 'src', 'reply-needed.js'));
 const cerebras = require(join(ROOT, 'src', 'cerebras.js'));
 const aiProviders = require(join(ROOT, 'src', 'ai-providers.js'));
 
-const DB_PATH = String.raw`C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\data\mailstore.db`;
-const CONFIG_PATH = String.raw`C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\outlook-ai-config.json`;
+// 🔴 마스터 지시(2026-09-30): C: 드라이브 읽기 포함 일체 접근 금지 — E: 실경로만 사용
+//   (정션 C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\... 도 금지, 실경로 직접 사용)
+const DB_PATH = String.raw`E:\BmailData\outlook-ai-assistant\data\mailstore.db`;
+const CONFIG_PATH = String.raw`E:\BmailData\outlook-ai-assistant\outlook-ai-config.json`;
 const OUT_MD = join(ROOT, 'scripts', 'reply-needed-sample.md');
 
 const log = (...a) => console.log('[reply-needed-measure3]', new Date().toISOString(), ...a);

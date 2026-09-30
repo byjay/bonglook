@@ -29,8 +29,10 @@ const cerebras = require(join(ROOT, 'src', 'cerebras.js'));
 const actionState = require(join(ROOT, 'src', 'action-state.js'));
 const sentAxis = require(join(ROOT, 'src', 'sent-axis.js'));
 
-const DB_PATH = String.raw`C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\data\mailstore.db`;
-const CONFIG_PATH = String.raw`C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\outlook-ai-config.json`;
+// 🔴 마스터 지시(2026-09-30): C: 드라이브 읽기 포함 일체 접근 금지 — E: 실경로만 사용
+//   (정션 C:\Users\FREE\AppData\Roaming\outlook-ai-assistant\... 도 금지, 실경로 직접 사용)
+const DB_PATH = String.raw`E:\BmailData\outlook-ai-assistant\data\mailstore.db`;
+const CONFIG_PATH = String.raw`E:\BmailData\outlook-ai-assistant\outlook-ai-config.json`;
 const OUT_JSON = join(ROOT, 'scripts', 'jev-measure2-result.json');
 const fs = require('fs');
 
