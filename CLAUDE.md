@@ -20,7 +20,7 @@
 5. **사용자별 미러링** — 계정·폴더·즐겨찾기·서명·규칙은 실행 PC 의 Outlook 에서 동적으로. 마스터 개인값 기본값 금지.
 6. **UI 검증은 실제 렌더 캡처로** — DOM 좌표만으로 PASS 금지. 마스터가 PC 사용 중이면 포커스 뺏는 자동 조작 금지.
 7. 대비 ≥ 4.5:1 · 고아 0(`scripts/scan-orphans.mjs`) · 셀프체크 통과(`scripts/selfcheck.mjs`).
-8. 🔴 **C: 드라이브 쓰기 금지(마스터 지시 2026-09-29)** — C: 여유가 1GB 미만. 작업 산출물·임시파일·캐시·DB 복사·빌드 출력 전부 **E:** 에. 실행 전 `TEMP=E:\tmp`·`TMP=E:\tmp`·`npm_config_cache=E:\tmp\npm-cache`·`ELECTRON_BUILDER_CACHE=E:\tmp\eb-cache` 지정. 실DB 는 읽기 전용만(복사 금지). Bmail 설치·데이터는 E: 이전 완료(2026-09-29, `E:\Apps`·`E:\BmailData` + C: 원경로 정션) — 재설치는 반드시 `scripts/install-silent.mjs`(/D= + 정션 복구)로만.
+8. 🔴 **C: 드라이브 접근 전면 금지 — 읽기 포함(마스터 지시 2026-09-29 쓰기 금지 → 2026-09-30 접근 금지로 강화)** — 조사·측정·로그·DB·config 전부 E: 실경로(`E:\BmailData\outlook-ai-assistant`·`E:\Apps\outlook-ai-assistant`)로만. `%APPDATA%`·`%LOCALAPPDATA%`·`C:\Users\…` 경로(정션 경유 포함) 사용 금지. C: 정션을 건드려야 하는 재설치는 마스터 승인 후에만. 작업 산출물·임시파일·캐시·DB 복사·빌드 출력 전부 **E:** 에. 실행 전 `TEMP=E:\tmp`·`TMP=E:\tmp`·`npm_config_cache=E:\tmp\npm-cache`·`ELECTRON_BUILDER_CACHE=E:\tmp\eb-cache` 지정. 실DB 는 읽기 전용만(복사 금지). Bmail 설치·데이터는 E: 이전 완료(2026-09-29, `E:\Apps`·`E:\BmailData` + C: 원경로 정션) — 재설치는 반드시 `scripts/install-silent.mjs`(/D= + 정션 복구)로만.
 
 ## Jev 판정 규율 (전역 CLAUDE.md §1-B · 스킬 `jev-typed-decisions`)
 - **대상(후보 고정·산문 불필요·대량 반복)**: 메일 처리상태 제안(todo/hold/done/fyi) · 주제/이벤트 분류(도면·승인·견적·회의·발주…) · 회신 필요 여부(noul) · 광고/뉴스레터 판정(noul) · 대화 의도 라우팅(규칙이 불확실할 때만 보조).

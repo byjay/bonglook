@@ -5,6 +5,8 @@
 - Jev 현황: **앱 실경로 미적용**(`src/jev.js` import 는 `jev-server.js` 뿐) · 에이전트 모델 등급은 `jev_route.py` 로 4건 판정해 사용.
 - 다음 착수 후보(마스터 지시 대기, 순서대로 권장): ① reply_needed Jev 보조(0.70~0.90 「추정」, <0.70 LLM 승격) — 20건+ 재측정 후 문턱 통과 시만 ② GPU 유휴 야간 과거메일 일괄분류 ③ wd-checker Jev 적용.
 - 마스터 몫: Docker vhdx 59.9GB 정리(C: 확보) · (선택) OpenRouter 키 교체 · C: 에 25분간 ~0.8GB 쓴 미확인 프로세스(미조사).
+- 🔴 (2026-09-30 마스터) **C: 접근 전면 금지(읽기 포함), E: 에서만.** 아래 C: 조사는 이 지시 이전 수행분 — 이후 C: 조사 재개 금지.
+- 🔎 (2026-09-30 지휘자 실측) C: 여유 6.60GB. 「미확인 0.8GB 쓰기」 정체 = **Claude 데스크톱 `Roaming\Claude\vm_bundles` 12.38GB(09-29 06:22 기록)** 가 유력. 기타 대형: `Local\Temp` 34.4GB(최근48h 6.2GB, `Temp\1fm50nhw` 3.79GB·루트 직속 2.21GB) · `npm-cache` 5.94GB · `.cache` 4.58GB · Docker vhdx 59.86GB(변화 없음). 삭제는 마스터 몫.
 - 미추적 파일: `.claude/launch.json`·`outlook-desktop-2026-07-24-b.tar.gz` — 이 세션 산출물 아님, 손대지 않음.
 
 ## 미완료 (2026-09-28 갱신 — 1~5 완료, 6 대기)
