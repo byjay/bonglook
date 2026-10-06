@@ -1353,6 +1353,8 @@ button:where(:not(.btn-primary):not(.rb-btn):not(.rail-btn):not(.fld-item):not(.
 .ai-toast{position:fixed; right:18px; bottom:18px; z-index:1200; background:#0b4f8a; color:#ffffff;
   font-size:12.5px; padding:10px 14px; border-radius:7px; box-shadow:0 3px 12px rgba(0,0,0,.25); max-width:420px;}
 .ai-toast.hidden{display:none;}
+/* 본문 링크(평문 → linkifyText). #005a9e on #ffffff = 7.0:1 */
+.rp-body a.rp-link{color:#005a9e; text-decoration:underline; word-break:break-all; cursor:pointer;}
 
 
 /* ---- 오늘 사용량 (무료 한도 대비) ----

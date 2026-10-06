@@ -32,7 +32,7 @@ process.on('unhandledRejection', (reason) => {
   try { console.error('[unhandledRejection]', reason); } catch (e) { /* noop */ }
 });
 
-const { app, BrowserWindow, ipcMain, dialog, shell, Notification } = require('electron');
+const { app, BrowserWindow, WebContentsView, ipcMain, dialog, shell, Notification, session, screen } = require('electron');
 const path = require('path');
 const fsMain = require('fs');   // PST 파일 크기 등 진단용
 const { spawn } = require('child_process');   // 정리 작업 별도 프로세스 실행
@@ -55,6 +55,7 @@ const organizeAttach = require('./attach-organize');   // 대화로 첨부 정�
 const aiErrors = require('./ai-errors');               // AI 실패 → 사람이 읽는 문구
 const aiProviders = require('./ai-providers');          // AI 제공자 프리셋(Cerebras/Groq/Gemini/OpenRouter/사용자지정)
 const sentAxis = require('./sent-axis');   // 보낸메일 분류 축(날짜별·이벤트별) 순수 집계 // 메일별 내 처리 상태(할일/보류/처리/확인) 정의·자동제안
+const linkDownload = require('./link-download');   // 본문 링크 클릭 → 파일/대용량첨부는 숨김창에서 바로 다운로드
 const replyNeeded = require('./reply-needed');   // 회신 필요성(의미) LLM 판정층 — 기존 미회신(사실) 후보 위에 얹는다
 
 // ============================================================
@@ -223,8 +224,10 @@ function createWindow() {
 
   // charset을 명시하여 로드 (일부 환경에서 meta 인식 실패 대비)
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'), { });
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url); return { action: 'deny' };
+  // 링크는 앱 창 안에서 열지 않는다 — 새 창 요청·페이지 이동 모두 openLink(분류: 다운로드/외부/무시) 한 곳으로
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => { openLink(url); return { action: 'deny' }; });
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (/^(https?|mailto):/i.test(url)) { e.preventDefault(); openLink(url); }
   });
 
   // ★ 창을 다시 볼 때 1회 즉시 갱신 — 자리를 비운 사이 바뀐 내용을 바로 반영한다.
@@ -1662,6 +1665,33 @@ ipcMain.handle('extras:flagged', (_e, { includeDone } = {}) =>
 //  집계는 dashboard-agg, 파일 쓰기는 exporter 가 담당(단일 책임).
 // ============================================================
 function exportRoot() { return store.get('exportRoot') || exporter.defaultRoot(); }
+
+// ============================================================
+//  본문 링크 열기 — 파일/대용량첨부 링크는 우하단 다운로드 팝업에서 바로 다운로드(link-download.js),
+//  나머지는 외부 브라우저
+//  저장 폴더: 내보내기 폴더(exportRoot — 설정에서 바꾸는 기존 SoT) 아래 '링크다운로드'
+// ============================================================
+const LINK_DL_SUBDIR = '링크다운로드';
+function linkDownloadDir() { return path.join(exporter.resolveRoot(exportRoot()), LINK_DL_SUBDIR); }
+let linkDownloader = null;
+function openLink(url) {
+  try {
+    if (!linkDownloader) {
+      linkDownloader = linkDownload.createLinkDownloader({
+        BrowserWindow, WebContentsView, screen, ipcMain, session, shell,
+        getSaveDir: linkDownloadDir,
+        getParent: () => mainWindow,
+        popupHtml: path.join(__dirname, 'renderer', 'link-popup.html'),
+        popupPreload: path.join(__dirname, 'link-popup-preload.js')
+      });
+    }
+    return linkDownloader.open(url);
+  } catch (e) {
+    console.error('링크 열기 실패:', e);
+    return { ok: false, action: 'error', reason: String(e.message || e) };
+  }
+}
+ipcMain.handle('link:open', (_e, { url }) => openLink(url));
 
 // 대시보드용 원본 메일 — 화면이 준 id 목록이 있으면 그것만, 없으면 전체(상한)
 function mailsForExport({ ids, limit = 30000 } = {}) {

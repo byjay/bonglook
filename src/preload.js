@@ -169,6 +169,8 @@ contextBridge.exposeInMainWorld('api', {
   // === 파일/탐색기 ===
   showItem: (p) => ipcRenderer.invoke('shell:showItem', { path: p }),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', { path: p }),
+  // 본문 링크 열기 — 파일/대용량첨부는 바로 다운로드, 그 외는 외부 브라우저(main 이 분류)
+  openLink: (url) => ipcRenderer.invoke('link:open', { url }),
 
   // 앱 정보
   getVersion: () => ipcRenderer.invoke('app:getVersion'),

@@ -568,6 +568,20 @@ window.addEventListener('DOMContentLoaded', async () => {
   window.api.onNewMails((mails) => { handleNewMails(mails); handleNewMailsLive(mails); });
   window.api.onRealtimeStatus(handleRealtimeStatus);
   window.api.onOpenMail(({ id }) => { if (id) { switchView('mail'); openMailDetail({ id }); } });
+  // ----- 본문 링크: 앱 안에서 열지 않고 main 이 분류(파일·대용량첨부 → 우하단 다운로드 팝업 / 그 외 → 브라우저) -----
+  //   읽기창은 4곳(rpTargets)에 같은 구조(.rp-body)로 그려지므로 문서 1곳에서 위임한다.
+  //   진행·완료·자동 불가 표시는 팝업 창이 맡는다. 여기서는 팝업이 못 뜨는 경우만 알린다(조용한 실패 금지).
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('.rp-body a[href]');
+    if (!a) return;
+    e.preventDefault();
+    window.api.openLink(a.getAttribute('href'))
+      .then(r => {
+        if (r && r.action === 'queued') showAiToast('다운로드 창이 가득 차 대기열에 넣었습니다 — 하나가 닫히면 이어서 뜹니다');
+        else if (r && r.action === 'error') showAiToast('링크 열기 실패: ' + r.reason);
+      })
+      .catch(err => showAiToast('링크 열기 실패: ' + err.message));
+  });
   // Outlook 폴더 구조 변경 감지 → 트리·배지 자동 갱신 (전체 동기화 없이)
   // 주기 갱신(동기화 폴링): 폴더 트리 + Outlook 즐겨찾기를 함께 최신화
   window.api.onFolderTreeStale(() => {
@@ -5639,7 +5653,7 @@ function renderReadingPane(mail, atts, analyses, inlineAtts) {
     <input id="rp-reply-instruction" type="text" class="rp-instr" placeholder="답장 지시사항(선택): 예) 일정 다음 주로 조정 요청" />
   </div>`;
 
-  html += `<div class="rp-body">${escapeHtml((mail.body || '').slice(0, 12000))}</div>`;
+  html += `<div class="rp-body">${linkifyText((mail.body || '').slice(0, 12000))}</div>`;
 
   // ★ 읽기창 세로 2분할: 좌측 본문 / 우측 AI 분석 패널(기본 표시)
   //   AI 결과를 본문에 끼워 넣으면 긴 메일에서 화면 밖으로 밀려 "반응 없음"처럼 보인다.
@@ -6765,6 +6779,21 @@ function autoGrow() {
 // ============================================================
 function showLoading(text) { $('#loading-text').textContent = text || '처리 중...'; $('#loading').classList.remove('hidden'); }
 function hideLoading() { $('#loading').classList.add('hidden'); }
+// 본문(평문) 속 http(s) 주소를 클릭 가능한 링크로 — 조각마다 escapeHtml 을 거친다(본문 HTML 주입 없음).
+//  끝의 문장부호는 링크에서 뺀다. 비ASCII(한글 등)·따옴표·꺾쇠에서 주소가 끝난다(Outlook 평문의 <URL> 표기).
+const LINK_RE_CLIENT = /https?:\/\/[^\s<>"'`\P{ASCII}]+/giu;
+function linkifyText(raw) {
+  const s = String(raw || '');
+  let out = '', last = 0;
+  for (const m of s.matchAll(LINK_RE_CLIENT)) {
+    const url = m[0].replace(/[.,;:!?)\]}]+$/, '');
+    if (!/^https?:\/\/./i.test(url)) continue;
+    out += escapeHtml(s.slice(last, m.index)) + `<a class="rp-link" href="${escapeHtml(url)}" title="${escapeHtml(url)}">${escapeHtml(url)}</a>`;
+    last = m.index + url.length;
+  }
+  return out + escapeHtml(s.slice(last));
+}
+
 function escapeHtml(str) {
   return String(str || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

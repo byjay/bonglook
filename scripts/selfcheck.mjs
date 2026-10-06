@@ -68,7 +68,7 @@ try {
 
 // ---- 3) 모듈별 셀프체크 (파일이 있을 때만) ----
 let n = 3;
-for (const mod of ['action-state.js', 'dashboard-agg.js', 'exporter.js', 'sent-axis.js', 'attach-organize.js', 'ai-errors.js', 'ai-providers.js', 'jev.js', 'attachments.js', 'attach-vision.js', 'attach-content.js', 'reply-needed.js']) {
+for (const mod of ['action-state.js', 'dashboard-agg.js', 'exporter.js', 'sent-axis.js', 'attach-organize.js', 'ai-errors.js', 'ai-providers.js', 'jev.js', 'attachments.js', 'attach-vision.js', 'attach-content.js', 'reply-needed.js', 'link-download.js']) {
   const p = join(ROOT, 'src', mod);
   if (!existsSync(p)) continue;
   console.log(`[${n++}] ${mod} 셀프체크`);
@@ -176,6 +176,53 @@ try {
   guardsShowLoading ? ok('replyNeeded 진행상황은 전체화면 로딩을 띄우지 않음(비침습 표시로 분리)')
     : bad('replyNeeded 진행상황이 전체화면 로딩(.loading)을 침범할 위험');
 } catch (e) { bad('자동 판정 트리거 확인 실패: ' + e.message); }
+
+// ---- N) 본문 링크화 + 링크 다운로드 배선 (2026-10, 마스터: "링크 클릭하면 바로 다운로드") ----
+//   본문은 평문 → linkifyText 가 http(s) 만 <a> 로 바꾼다. 주입(XSS)·끝 문장부호·한글 경계 회귀 차단.
+console.log(`[${n++}] 본문 링크화(linkifyText) · 링크 다운로드 배선`);
+try {
+  const rsrc = readFileSync(join(ROOT, 'src', 'renderer', 'renderer.js'), 'utf8').replace(/\r\n/g, '\n');
+  const pick = (re, name) => { const m = rsrc.match(re); if (!m) throw new Error(`${name} 를 renderer.js 에서 찾지 못함`); return m[0]; };
+  const snippet = [
+    pick(/const LINK_RE_CLIENT = [^\n]*\n/, 'LINK_RE_CLIENT'),
+    pick(/function linkifyText\(raw\)[\s\S]*?\n}\n/, 'linkifyText'),
+    pick(/function escapeHtml\(str\)[\s\S]*?\n}\n/, 'escapeHtml'),
+    'module.exports = linkifyText;'
+  ].join('\n');
+  const mod = { exports: {} };
+  new Function('module', 'exports', snippet)(mod, mod.exports);
+  const lk = mod.exports;
+  const CASES = [
+    ['보세요 https://a.com/x.pdf.', '보세요 <a class="rp-link" href="https://a.com/x.pdf" title="https://a.com/x.pdf">https://a.com/x.pdf</a>.'],
+    ['<https://a.com/d?x=1&y=2>', '&lt;<a class="rp-link" href="https://a.com/d?x=1&amp;y=2" title="https://a.com/d?x=1&amp;y=2">https://a.com/d?x=1&amp;y=2</a>&gt;'],
+    ['https://a.com/p에서 받기', '<a class="rp-link" href="https://a.com/p" title="https://a.com/p">https://a.com/p</a>에서 받기'],
+    ['https://a.com/"onmouseover="alert(1)', '<a class="rp-link" href="https://a.com/" title="https://a.com/">https://a.com/</a>&quot;onmouseover=&quot;alert(1)'],
+    ['<script>x</script> javascript:alert(1)', '&lt;script&gt;x&lt;/script&gt; javascript:alert(1)'],
+    ['(https://a.com/b)', '(<a class="rp-link" href="https://a.com/b" title="https://a.com/b">https://a.com/b</a>)']
+  ];
+  let diff = 0;
+  CASES.forEach(([inp, want], i) => { const got = lk(inp); if (got !== want) { diff++; console.log(`    불일치 #${i}: ${got}`); } });
+  diff === 0 ? ok(`linkifyText ${CASES.length}건 일치(주입 차단·문장부호·한글 경계)`) : bad(`linkifyText 불일치 ${diff}건`);
+  // 배선: 본문이 linkifyText 로 그려지고, 클릭 위임 → openLink → link:open → link-download 가 이어져야 한다
+  const pre = readFileSync(join(ROOT, 'src', 'preload.js'), 'utf8');
+  const mainSrc = readFileSync(join(ROOT, 'src', 'main.js'), 'utf8');
+  const wires = [
+    ['본문 렌더가 linkifyText 사용', /class="rp-body">\$\{linkifyText\(/.test(rsrc)],
+    ['읽기창 링크 클릭 위임(.rp-body a[href]) → openLink', /closest\('\.rp-body a\[href\]'\)[\s\S]{0,200}window\.api\.openLink\(/.test(rsrc)],
+    ['preload openLink → link:open', /openLink:\s*\(url\)\s*=>\s*ipcRenderer\.invoke\('link:open'/.test(pre)],
+    ['main link:open → openLink(link-download)', /ipcMain\.handle\('link:open'/.test(mainSrc) && /linkDownload\.createLinkDownloader\(/.test(mainSrc)],
+    ['새 창 요청도 openLink 경유(외부 openExternal 직행 없음)', /setWindowOpenHandler\(\(\{ url \}\) => \{ openLink\(url\);/.test(mainSrc)]
+  ];
+  // 다운로드 팝업 띠 ↔ main 채널 정합(scan-orphans 는 main preload 만 보므로 여기서 잡는다)
+  const ldSrc = readFileSync(join(ROOT, 'src', 'link-download.js'), 'utf8');
+  const lpPre = readFileSync(join(ROOT, 'src', 'link-popup-preload.js'), 'utf8');
+  const lpHtml = readFileSync(join(ROOT, 'src', 'renderer', 'link-popup.html'), 'utf8');
+  for (const ch of ['ldp:ready', 'ldp:act']) wires.push([`팝업 채널 ${ch} (preload send ↔ main on)`, lpPre.includes(`send('${ch}'`) && ldSrc.includes(`ipcMain.on('${ch}'`)]);
+  wires.push(['팝업 채널 ldp:state (main send ↔ preload on)', ldSrc.includes(`send('ldp:state'`) && lpPre.includes(`on('ldp:state'`)]);
+  wires.push(['팝업 html → link-popup.js', /<script src="link-popup\.js"><\/script>/.test(lpHtml) && existsSync(join(ROOT, 'src', 'renderer', 'link-popup.js'))]);
+  wires.push(['main 이 팝업 html·preload 경로 주입', /link-popup\.html/.test(mainSrc) && /link-popup-preload\.js/.test(mainSrc)]);
+  for (const [name, pass] of wires) pass ? ok(name) : bad('배선 끊김: ' + name);
+} catch (e) { bad('링크 다운로드 검사 실패: ' + e.message); }
 
 console.log(failed ? `\n셀프체크 실패 ${failed}건` : '\n셀프체크 전부 통과');
 process.exit(failed ? 1 : 0);
