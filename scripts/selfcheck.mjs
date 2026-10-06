@@ -198,8 +198,14 @@ try {
     ['https://a.com/p에서 받기', '<a class="rp-link" href="https://a.com/p" title="https://a.com/p">https://a.com/p</a>에서 받기'],
     ['https://a.com/"onmouseover="alert(1)', '<a class="rp-link" href="https://a.com/" title="https://a.com/">https://a.com/</a>&quot;onmouseover=&quot;alert(1)'],
     ['<script>x</script> javascript:alert(1)', '&lt;script&gt;x&lt;/script&gt; javascript:alert(1)'],
-    ['(https://a.com/b)', '(<a class="rp-link" href="https://a.com/b" title="https://a.com/b">https://a.com/b</a>)']
+    ['(https://a.com/b)', '(<a class="rp-link" href="https://a.com/b" title="https://a.com/b">https://a.com/b</a>)'],
+    // 실측 결함(2026-10-06): /iu 플래그에서 K·S·k·s 가 비ASCII 로 접혀 naver 링크가 잘렸다
+    ['https://n.com/d?fid=B+KmKs+SkS==', '<a class="rp-link" href="https://n.com/d?fid=B+KmKs+SkS==" title="https://n.com/d?fid=B+KmKs+SkS==">https://n.com/d?fid=B+KmKs+SkS==</a>'],
+    ['HTTPS://A.COM/KS', '<a class="rp-link" href="HTTPS://A.COM/KS" title="HTTPS://A.COM/KS">HTTPS://A.COM/KS</a>']
   ];
+  //  실DB 형태(합성 fid — 실제 링크는 커밋 금지): naver bigfile 링크 전체가 끝까지 링크화되는가
+  const longUrl = 'https://bigfile.mail.naver.com/download?fid=AB+cdEF+GHKsKSkskAbCdKSKSefGhKSksXyZ+KsKS/KoKsaBcSKsk==';
+  CASES.push([`첨부: ${longUrl}  \t`, `첨부: <a class="rp-link" href="${longUrl}" title="${longUrl}">${longUrl}</a>  \t`]);
   let diff = 0;
   CASES.forEach(([inp, want], i) => { const got = lk(inp); if (got !== want) { diff++; console.log(`    불일치 #${i}: ${got}`); } });
   diff === 0 ? ok(`linkifyText ${CASES.length}건 일치(주입 차단·문장부호·한글 경계)`) : bad(`linkifyText 불일치 ${diff}건`);

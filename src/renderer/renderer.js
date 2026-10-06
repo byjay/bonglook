@@ -6781,7 +6781,9 @@ function showLoading(text) { $('#loading-text').textContent = text || '처리 �
 function hideLoading() { $('#loading').classList.add('hidden'); }
 // 본문(평문) 속 http(s) 주소를 클릭 가능한 링크로 — 조각마다 escapeHtml 을 거친다(본문 HTML 주입 없음).
 //  끝의 문장부호는 링크에서 뺀다. 비ASCII(한글 등)·따옴표·꺾쇠에서 주소가 끝난다(Outlook 평문의 <URL> 표기).
-const LINK_RE_CLIENT = /https?:\/\/[^\s<>"'`\P{ASCII}]+/giu;
+//  🔴 i 플래그 금지: /iu 에서는 K·S 가 켈빈 기호(U+212A)·긴 s(U+017F)로 대소문자 접힘돼 비ASCII 제외 범위에 걸린다
+//     (실측 2026-10-06: naver bigfile 링크가 ...fid=DQ+qWz05+B 에서 잘림 — 다음 글자가 K)
+const LINK_RE_CLIENT = /[Hh][Tt][Tt][Pp][Ss]?:\/\/[^\s<>"'`\P{ASCII}]+/gu;
 function linkifyText(raw) {
   const s = String(raw || '');
   let out = '', last = 0;
