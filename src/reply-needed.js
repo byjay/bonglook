@@ -16,16 +16,7 @@
 
 const cerebras = require('./cerebras');
 
-function extractJson(text) {
-  const s = String(text || '').trim();
-  if (!s) return null;
-  const m = s.match(/\{[\s\S]*\}/);
-  if (!m) return null;
-  try {
-    const o = JSON.parse(m[0]);
-    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : null;
-  } catch (_) { return null; }
-}
+const { extractJson } = require('./extract-json');   // SoT: 펜스·앞뒤 설명문·배열거부 (analyzer.js 와 공유)
 
 const SYSTEM = [
   '당신은 한국 조선/해양 엔지니어링 회사의 이메일 "회신 필요성" 판정기입니다.',

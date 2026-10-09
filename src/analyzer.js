@@ -108,24 +108,8 @@ async function briefing({ keys, model, mails, periodLabel = '최근 기간', onP
 // ------------------------------------------------------------
 //  2) 외국어 메일 번역 + 분석
 // ------------------------------------------------------------
-// 응답에서 JSON 객체만 안전하게 추출 (모델이 앞뒤에 설명을 붙여도 복구)
-function extractJson(text) {
-  const s = String(text || '').trim();
-  if (!s) return null;
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidates = [];
-  if (fence) candidates.push(fence[1]);
-  candidates.push(s);
-  const first = s.indexOf('{'), last = s.lastIndexOf('}');
-  if (first !== -1 && last > first) candidates.push(s.slice(first, last + 1));
-  for (const c of candidates) {
-    try {
-      const o = JSON.parse(c.trim());
-      if (o && typeof o === 'object' && !Array.isArray(o)) return o;
-    } catch (_) {}
-  }
-  return null;
-}
+// 응답에서 JSON 객체만 안전하게 추출 — SoT 는 extract-json.js (reply-needed.js 와 공유, 2026-10-09 공용화)
+const { extractJson } = require('./extract-json');
 
 // ------------------------------------------------------------
 //  도면번호·호선번호·프로젝트코드 자동 추출 (규칙기반 — AI 호출 없음, 원문 정규식 매칭이라
