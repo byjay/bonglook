@@ -46,3 +46,4 @@
 - [링크 다운로드 서비스 구조 2026-10-06] → mailplug filefree=307→filefree2 직링크(최근건 만료: alert 페이지) · naver bigfile=Content-Disposition 직링크(유효) · daum bigfile=만료 alert 페이지 · hanwha bigmail=ECONNRESET(사내망). 구현 src/link-download.js(커밋 96adb42)
 - [linkify /iu 결함 2026-10-06] → /[^...\P{ASCII}]/iu 는 K·S·k·s 를 U+212A·U+017F 로 접어 비ASCII 로 판정 → URL 이 K/S 앞에서 잘림. i 플래그 금지 (renderer.js LINK_RE_CLIENT, 커밋 c8d4c80)
 - [Bmail 빌드 node 없이 2026-10-06] → ELECTRON_RUN_AS_NODE=1 + ELECTRON_NO_ASAR=1(없으면 Invalid package app.asar) + argv 보정 래퍼(E:	mplinkdleb-wrap.js, electron 에선 yargs hideBin 이 1칸만 자름) + -c.npmRebuild=false. 성공 EXIT 0
+- [창고 입고 2026-10-09] → 부품 24파일 (_warehouse/22-electron-desktop-mail, 커밋 ca55699) — 정화본 7(개인값 제거, collect 미등록)·바이트동일 12(collect 등록)·분리신규 4. robustJsonParse→extract-json 대체, 역수입 후보는 지휘자 보고
