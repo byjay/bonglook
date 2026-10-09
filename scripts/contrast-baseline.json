@@ -1,0 +1,10 @@
+{
+  "note": "기존 위반 보류 목록 — UI 변경 결정 전까지 유지. 신규 위반은 selfcheck 에서 차단.",
+  "keys": [
+    "src/renderer/style.css|.fld-count|#0078d4|#e5f1fb",
+    "src/renderer/style.css|.key-status.ok|#0078d4|#e5f1fb",
+    "src/renderer/style.css|.attach-tag|#0078d4|#e5f1fb",
+    "src/renderer/style.css|.badge|#0078d4|#e5f1fb",
+    "src/renderer/style.css|.conn-status.ok|#0078d4|#e5f1fb"
+  ]
+}

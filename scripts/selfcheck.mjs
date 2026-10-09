@@ -230,5 +230,15 @@ try {
   for (const [name, pass] of wires) pass ? ok(name) : bad('배선 끊김: ' + name);
 } catch (e) { bad('링크 다운로드 검사 실패: ' + e.message); }
 
+// ---- N) CSS 색 대비 기계 검사 (2026-10-09, 창고 역수입 ②) ----
+//   scripts/check-contrast.mjs — 같은 규칙 안 color/background 확정 쌍만 WCAG 판정. 기존 위반은
+//   scripts/contrast-baseline.json 에 보류(UI 변경은 별도 결정), **신규 위반 0** 만 여기서 강제한다.
+console.log(`[${n++}] CSS 색 대비 기계 검사 (신규 위반 0 기준선)`);
+try {
+  const cc = join(ROOT, 'scripts', 'check-contrast.mjs');
+  ok(execFileSync(process.execPath, [cc, '--selftest'], { encoding: 'utf8' }).trim());
+  ok(execFileSync(process.execPath, [cc], { encoding: 'utf8' }).trim().split('\n')[0]);
+} catch (e) { bad('대비 검사 실패(신규 위반 또는 self-test): ' + String(e.stdout || e.message).slice(0, 600)); }
+
 console.log(failed ? `\n셀프체크 실패 ${failed}건` : '\n셀프체크 전부 통과');
 process.exit(failed ? 1 : 0);
