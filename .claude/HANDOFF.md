@@ -1,5 +1,12 @@
 # HANDOFF — Bmail (bonglook)
 
+## 🔄 창고 역수입·보안 강화 (2026-10-09 시작, 429 로 중단 → 2026-11-06 재개)
+- [x] ① extract-json 공용화 a002ee0 · [x] ② 대비 검사 9dd53ec(재검증 완료, 변조 없음)
+- [x] ③ config:get 키 렌더러 노출 차단 8f61722(지휘자 재실행 test 27/27·selfcheck EXIT 0, TLC 7,427 상태). 미해결: 키 전체 삭제 불가·baseUrl 변경 시 키 전송·bigmail 기본 키 하드코딩(main.js·bigmail.js)
+- 🔴 작업 트리는 타 세션 `syncControlTower` 고아로 scan-orphans --guard ERROR 1 → **prebuild 차단 중**. 빌드하려면 마스터 결정 필요. 협의: `E:\code-project\AGENT_TALK_SGW_BMAIL.md`
+- [ ] ④ Outlook COM 금지 호출 코드 가드 · [ ] ⑤ 무료 LLM 전 가역 마스킹(이메일·전화·계좌, 이름·회사 제외, 기본 ON)
+- 🔴 미커밋 `src/main.js`·`src/preload.js` 의 `cloud:syncControlTower` 줄과 `src/sgw-sedms-sync.js` 는 **타 세션(10-21) 작업** — 되돌리거나 함께 커밋 금지. 내 커밋은 임시 index 로 내 변경분만.
+
 ## 🟢 세션 종료 스냅샷 (2026-09-29, 마스터 "마무리")
 - 상태: 1~5·7·7-1·9 완료. 이전 재검증(지휘자 직접): C: 여유 2.22GB · 실행본 `E:\Apps\outlook-ai-assistant\Bmail.exe` · DB 쓰기 E: · 정션 4개 대상 정상 · 잔여 예약작업 0.
 - Jev 현황: **앱 실경로 미적용**(`src/jev.js` import 는 `jev-server.js` 뿐) · 에이전트 모델 등급은 `jev_route.py` 로 4건 판정해 사용.
