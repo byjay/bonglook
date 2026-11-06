@@ -47,3 +47,4 @@
 - [linkify /iu 결함 2026-10-06] → /[^...\P{ASCII}]/iu 는 K·S·k·s 를 U+212A·U+017F 로 접어 비ASCII 로 판정 → URL 이 K/S 앞에서 잘림. i 플래그 금지 (renderer.js LINK_RE_CLIENT, 커밋 c8d4c80)
 - [Bmail 빌드 node 없이 2026-10-06] → ELECTRON_RUN_AS_NODE=1 + ELECTRON_NO_ASAR=1(없으면 Invalid package app.asar) + argv 보정 래퍼(E:	mplinkdleb-wrap.js, electron 에선 yargs hideBin 이 1칸만 자름) + -c.npmRebuild=false. 성공 EXIT 0
 - [창고 입고 2026-10-09] → 부품 24파일 (_warehouse/22-electron-desktop-mail, 커밋 ca55699) — 정화본 7(개인값 제거, collect 미등록)·바이트동일 12(collect 등록)·분리신규 4. robustJsonParse→extract-json 대체, 역수입 후보는 지휘자 보고
+- [config:get 키 노출 2026-11-06] → 키 26개가 렌더러로 넘어가던 것 차단. 정본 `src/config-keys.js`(토큰=끝4자리+sha256 8자, keysRev 있어야 줄삭제 인정), 연결 main.js config:get/set·ai:providers·ai:models, 테스트 scripts/test-config-keys.cjs, TLC formal/config_keys.tla(모듈명에 하이픈 불가). 잔여: bigmail 기본 키 소스 하드코딩(main.js defaults.bigmailKey, bigmail.js DEFAULT_KEY), 렌더러가 baseUrl 을 바꾸면 키가 그 주소로 전송되는 경로

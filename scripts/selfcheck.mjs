@@ -240,5 +240,13 @@ try {
   ok(execFileSync(process.execPath, [cc], { encoding: 'utf8' }).trim().split('\n')[0]);
 } catch (e) { bad('대비 검사 실패(신규 위반 또는 self-test): ' + String(e.stdout || e.message).slice(0, 600)); }
 
+// ---- N) API 키 렌더러 노출 차단 (2026-11-06) ----
+//   config:get·config:set·ai:providers·ai:models 를 스텁 위 main.js 로 호출하고, 등록 핸들러 전수의 응답도 훑는다.
+console.log(`[${n++}] API 키 렌더러 노출 차단 (config-keys · IPC 전수)`);
+try {
+  const out = execFileSync(process.execPath, [join(ROOT, 'scripts', 'test-config-keys.cjs')], { encoding: 'utf8' }).trim();
+  ok(out.split('\n').pop());
+} catch (e) { bad('config-keys 테스트 실패: ' + String(e.stdout || e.message).split('\n').filter(l => /FAIL|오류/.test(l)).slice(0, 8).join(' | ').slice(0, 800)); }
+
 console.log(failed ? `\n셀프체크 실패 ${failed}건` : '\n셀프체크 전부 통과');
 process.exit(failed ? 1 : 0);

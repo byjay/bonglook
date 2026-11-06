@@ -5,7 +5,7 @@
 
 // ---------- 상태 ----------
 let config = {
-  apiKeys: ['', '', '', '', ''], model: 'gpt-oss-120b', maxMails: 5000,
+  model: 'gpt-oss-120b', maxMails: 5000,
   source: 'outlook', pstPath: '',
   dateFilter: { mode: '6months', start: '', end: '' },
   realtime: true, realtimeIntervalMin: 3, syncNewOnStart: true, notifyNewMail: true, saveAttachmentsOnSync: true,
@@ -443,18 +443,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   $('#btn-chain-test').addEventListener('click', () => runChainTest());
   $('#btn-usage-refresh').addEventListener('click', () => refreshAiUsage());
   // 제공자 프리셋·등록된 체인을 받아 설정 화면에 그린다
-  window.api.aiProviders().then(r => {
-    if (r && r.ok) {
-      providerPresets = r.presets || [];
-      providerChain = (r.chain || []).map(e => ({
-        provider: e.provider, baseUrl: e.baseUrl, model: e.model,
-        keys: e.keys || [], accountId: e.accountId || '', enabled: e.enabled !== false
-      }));
-      renderProviderChain();
-      updateKeyStatus();
-      refreshAiUsage();
-    }
-  }).catch(() => {});
+  loadProviderChain().catch(() => {});
   refreshAiState();
   window.addEventListener('keydown', (e) => {
     const t = e.target;
@@ -2213,7 +2202,7 @@ function applyConfigToUI() {
   if ($('#btn-sent-list')) $('#btn-sent-list').classList.toggle('active', svm === 'list');
   if ($('#autodaily-toggle')) $('#autodaily-toggle').checked = config.autoDailyBriefing === true;
   if ($('#bm-base')) $('#bm-base').value = config.bigmailBase || 'https://bigmail.sedms.app';
-  if ($('#bm-key')) $('#bm-key').value = config.bigmailKey || 'BM-INT-WEAR-S001';
+  if ($('#bm-key')) $('#bm-key').value = config.bigmailKey || '';
   if ($('#bm-expire')) $('#bm-expire').value = String(config.bigmailExpireDays || 7);
   loadBigmailHistory();
   loadOrganizeHistoryPanel();
@@ -2248,12 +2237,9 @@ async function saveSettings(opts) {
   //  제공자 체인(순위 순)을 저장한다. 제공자별 키·모델·URL 은 각 항목 안에 독립 보관된다.
   const chain = collectProviderChain();
   const primary = chain.find(e => e.enabled !== false) || chain[0] || { provider: 'cerebras', baseUrl: '', model: '', keys: [] };
-  const byProv = Object.assign({}, config.apiKeysByProvider || {});
-  chain.forEach(e => { byProv[e.provider] = e.keys; });
   const newConfig = {
-    aiChain: chain,
-    apiKeys: (chain.find(e => e.provider === 'cerebras') || {}).keys || (config.apiKeys || []),   // 레거시 필드 보존
-    apiKeysByProvider: byProv,
+    aiChain: chain,                // 키 값은 토큰으로만 오간다 — 원복·다른 저장 필드 반영은 main(config-keys.js) 담당
+    keysRev: config.keysRev,
     aiProvider: primary.provider,
     aiBaseUrl: primary.baseUrl || '',
     model: primary.model || $('#model-select').value,
@@ -2283,11 +2269,14 @@ async function saveSettings(opts) {
     signatureName: $('#sig-select') ? $('#sig-select').value : '',
     autoDailyBriefing: $('#autodaily-toggle') ? $('#autodaily-toggle').checked : false,
     bigmailBase: ($('#bm-base') ? $('#bm-base').value.trim() : '') || 'https://bigmail.sedms.app',
-    bigmailKey: ($('#bm-key') ? $('#bm-key').value.trim() : '') || 'BM-INT-WEAR-S001',
+    bigmailKey: $('#bm-key') ? $('#bm-key').value.trim() : '',
     bigmailExpireDays: parseInt($('#bm-expire') ? $('#bm-expire').value : 7, 10) || 7,
     archiveStoreNames: config.archiveStoreNames === undefined ? null : config.archiveStoreNames
   };
   config = await window.api.setConfig(newConfig);
+  //  입력창의 새 키 원문을 저장 직후 토큰으로 교체한다.
+  if ($('#bm-key')) $('#bm-key').value = config.bigmailKey || '';
+  await loadProviderChain().catch(() => {});
   updateKeyStatus(); updateRealtimeDot(); refreshConnectionStatus(); syncSourceUI();
   refreshAiState();                              // 제공자·키가 바뀌면 상태 배지도 갱신
   if (opts && opts.silent) return;               // 연결 테스트에서 부를 때는 알림을 띄우지 않는다
@@ -6492,6 +6481,20 @@ let providerChain = [];          // 화면에 그려진 제공자 목록(순위 
 
 function presetOf(id) { return providerPresets.find(p => p.id === id) || null; }
 
+//  제공자 프리셋·등록된 체인을 받아 설정 화면에 그린다 (시작 시·저장 후)
+async function loadProviderChain() {
+  const r = await window.api.aiProviders();
+  if (!r || !r.ok) return;
+  providerPresets = r.presets || [];
+  providerChain = (r.chain || []).map(e => ({
+    provider: e.provider, baseUrl: e.baseUrl, model: e.model,
+    keys: e.keys || [], accountId: e.accountId || '', enabled: e.enabled !== false
+  }));
+  renderProviderChain();
+  updateKeyStatus();
+  refreshAiUsage();
+}
+
 //  현재 1순위(활성·키 있음) 제공자의 키 — 키 개수 표시·판정에 쓴다
 function currentProviderKeys() {
   const usable = providerChain.filter(e => e.enabled !== false && (e.keys || []).some(k => k && k.trim()));
@@ -6504,10 +6507,7 @@ function currentProviderKeys() {
     if (ks.length) return ks;
   }
   const p = config.aiProvider || 'cerebras';
-  const map = config.apiKeysByProvider || {};
-  const set = (map[p] || []).filter(k => k && String(k).trim());
-  if (set.length) return set;
-  return p === 'cerebras' ? (config.apiKeys || []).filter(k => k && String(k).trim()) : [];
+  return ((config.keyInfo || {})[p] || {}).masks || [];
 }
 
 //  키가 필요 없는 제공자(Ollama 등)까지 포함해 '쓸 수 있는 제공자'가 있는지
@@ -6566,7 +6566,7 @@ function renderProviderChain() {
           <input type="text" class="chain-accountid" value="${escapeHtml(e.accountId || '')}" placeholder="Cloudflare 계정 ID" /></label>` : ''}
       </div>
       <div class="chain-fields">
-        <label class="chain-keys">API 키 (한 줄에 하나 · 2개 이상 권장)
+        <label class="chain-keys">API 키 (한 줄에 하나 · 2개 이상 권장 · 저장된 키는 끝 4자리만 표시 · 줄을 지우면 삭제, 전부 비우면 기존 키 유지)
           <textarea class="chain-keytext" rows="2" placeholder="${preset.needsKey === false ? '키가 필요 없습니다(아무 값이나 가능)' : '발급받은 API 키를 한 줄에 하나씩 붙여넣으세요'}">${escapeHtml(keysText)}</textarea>
         </label>
       </div>
@@ -6606,6 +6606,9 @@ function bindProviderChainRows() {
       providerChain[i].provider = ev.target.value;
       providerChain[i].baseUrl = preset ? preset.baseUrl : '';
       providerChain[i].model = preset ? preset.model : '';
+      //  이전 제공자의 토큰은 새 제공자에서 풀리지 않는다 — 새 제공자의 등록 키로 바꾸고 직접 입력한 키만 남긴다.
+      const storedMasks = ((config.keyInfo || {})[ev.target.value] || {}).masks || [];
+      providerChain[i].keys = [...storedMasks, ...(providerChain[i].keys || []).filter(k => !k.includes('•'))];
       renderProviderChain();
     });
     row.querySelector('.chain-up').addEventListener('click', () => moveProvider(i, -1));

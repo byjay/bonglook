@@ -52,6 +52,7 @@ const actionState = require('./action-state');
 const attachClassify = require('./attach-classify');   // 진짜 첨부 vs 인라인 이미지 판정
 const attachContent = require('./attach-content');      // 첨부 '내용' 추출→캐시→분석 프롬프트 주입(1단계)
 const organizeAttach = require('./attach-organize');   // 대화로 첨부 정리(계획·안전·실행)
+const configKeys = require('./config-keys');           // API 키 렌더러 노출 차단(마스킹·병합)
 const aiErrors = require('./ai-errors');               // AI 실패 → 사람이 읽는 문구
 const aiProviders = require('./ai-providers');          // AI 제공자 프리셋(Cerebras/Groq/Gemini/OpenRouter/사용자지정)
 const sentAxis = require('./sent-axis');   // 보낸메일 분류 축(날짜별·이벤트별) 순수 집계 // 메일별 내 처리 상태(할일/보류/처리/확인) 정의·자동제안
@@ -464,12 +465,12 @@ function startRealtimeIfNeeded() {
 // ============================================================
 
 // --- 설정 ---
-ipcMain.handle('config:get', () => store.store);
+ipcMain.handle('config:get', () => configKeys.sanitizeConfig(store.store));
 ipcMain.handle('config:set', (_e, newConfig) => {
-  store.set(newConfig);
+  store.set(configKeys.mergeIncomingKeys(store.store, newConfig));
   startRealtimeIfNeeded(); // 실시간/소스 설정 변경 즉시 반영
   applyAiConfig();         // AI 제공자/URL/모델 변경 즉시 반영
-  return store.store;
+  return configKeys.sanitizeConfig(store.store);
 });
 
 // --- PST 파일 선택 다이얼로그 ---
@@ -2687,10 +2688,10 @@ ipcMain.handle('ai:providers', () => {
     const chain = aiChain();
     return {
       ok: true, presets: aiProviders.listPresets(), current: c.provider,
-      baseUrl: c.baseUrl, model: c.model, keyUrl: c.keyUrl, note: c.note, keys: c.keys,
+      baseUrl: c.baseUrl, model: c.model, keyUrl: c.keyUrl, note: c.note, keys: c.keys.map(configKeys.maskKey),
       chain: chain.map(e => ({
         provider: e.provider, label: e.label, baseUrl: e.rawBaseUrl, model: e.model,
-        keys: e.keys, accountId: e.accountId, enabled: e.enabled, usable: e.usable,
+        keys: e.keys.map(configKeys.maskKey), accountId: e.accountId, enabled: e.enabled, usable: e.usable,
         needsKey: e.needsKey, needsAccountId: e.needsAccountId,
         free: e.free, card: e.card, training: e.training, privacy: e.privacy, note: e.note
       })),
@@ -2707,7 +2708,7 @@ ipcMain.handle('ai:models', async (_e, { provider, baseUrl, key } = {}) => {
     const cur = aiConfig();
     const pid = provider || cur.provider;
     const base = aiProviders.normalizeBaseUrl(baseUrl || (provider ? aiProviders.getPreset(pid).baseUrl : cur.baseUrl));
-    const useKey = key || (aiProviders.keysFor({
+    const useKey = configKeys.resolveKeyArg(store.store, pid, key) || (aiProviders.keysFor({
       aiChain: store.get('aiChain'), aiProvider: pid,
       apiKeys: store.get('apiKeys'), apiKeysByProvider: store.get('apiKeysByProvider')
     }, pid)[0] || '');
