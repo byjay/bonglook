@@ -16,8 +16,10 @@
 2026-11-06 | 실 config 대조 | 성공 | 메모리 sanitize: 키 패턴 26→0, 고유 키 14개 원문 0, 왕복 동일, 파일 무변경 | E:\tmp\cfgkeys\real.txt
 2026-11-06 | 고아 스캔 | 실패 | 작업 트리 scan-orphans --guard EXIT 1, ERROR 1건 = preload API 고아, 타 세션(10-21) 미커밋 코드, prebuild 가드가 막힘 | E:\tmp\cfgkeys\orph.txt
 2026-11-06 | 고아 스캔 | 성공 | 이 커밋만 내보낸 트리 scan-orphans --guard EXIT 0, ERROR 0·WARN 1(todo-reading-pane), 키 테스트 EXIT 0, 27/27 | E:\tmp\cfgkeys\orph-head.txt
+2026-11-20 | 푸시 | 보류 | 대상 github.com/byjay/bonglook = 공개(private:false), 원격에 무관한 기존 프로젝트(Vite Outlook add-in, .github Pages 배포, 2026-01-27) 존재 — 이력 불일치라 강제푸시 필요, 이력에 실명·회사명·라이선스키 포함 → 푸시 안 함 | 지휘자 확인(GitHub API 무인증 200)
 2026-11-20 | 테스트(Red) | 의도된 실패 | test-outlook-readonly --oracle EXIT 1, FAIL 49: 가드 export 없음 + 둥근 따옴표(U+2019) 데이터가 PowerShell 파서상 코드로 탈출(getSignature·probeAttachments 등, 파싱 오류 없이 .Delete 인식) | E:/tmp/comguard/red.txt
 2026-11-20 | 테스트(Green) | 성공 | test-outlook-readonly --oracle EXIT 0, PASS 708/FAIL 0, 실제 스크립트 29개(호출부 28곳), 파서 대조 4580건(퍼즈 4000, 금지 멤버 탐지 197건 전부 일치) | E:/tmp/comguard/green3.txt
 2026-11-20 | 뮤테이션 | 성공 | mutate.cjs 41건 전부 KILLED(가드 호출 제거 FAIL 157, 금지 항목 13개·패턴 8개 각각 제거 FAIL), 복구 sha 일치, 원복 EXIT 0 | E:/tmp/comguard/mutate.txt
 2026-11-20 | TLC | 성공 | formal/outlook_readonly.tla MC_ro EXIT 0, 1297 generated/324 distinct (스크립트 4개 경계); bug_nogate·bug_falsesuccess·bug_classifier·bug_overblock·sanity_spawn·sanity_refuse 전부 EXIT 12 | E:/tmp/comguard/tlc/
 2026-11-20 | selfcheck·키·고아 | 성공 | selfcheck EXIT 0([22] 가드 704/0), 키 패턴 grep 0줄, scan-orphans --guard EXIT 1 = 기존 syncControlTower 1건뿐(신규 0) | E:/tmp/comguard/selfcheck.txt
+2026-11-20 | 푸시 | 성공 | origin=github.com/byjay/bonglook 브랜치 bmail = 20d5778(34+1 커밋), main 미변경·Pages 배포 미발생(deploy.yml 은 main 만), 마스터 지시 「그냥해」로 공개 저장소 푸시 | git ls-remote

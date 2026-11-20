@@ -4,7 +4,10 @@
 - [x] ① extract-json 공용화 a002ee0 · [x] ② 대비 검사 9dd53ec(재검증 완료, 변조 없음)
 - [x] ③ config:get 키 렌더러 노출 차단 8f61722(지휘자 재실행 test 27/27·selfcheck EXIT 0, TLC 7,427 상태). 미해결: 키 전체 삭제 불가·baseUrl 변경 시 키 전송·bigmail 기본 키 하드코딩(main.js·bigmail.js)
 - 🔴 작업 트리는 타 세션 `syncControlTower` 고아로 scan-orphans --guard ERROR 1 → **prebuild 차단 중**. 빌드하려면 마스터 결정 필요. 협의: `E:\code-project\AGENT_TALK_SGW_BMAIL.md`
-- [ ] ④ Outlook COM 금지 호출 코드 가드 · [ ] ⑤ 무료 LLM 전 가역 마스킹(이메일·전화·계좌, 이름·회사 제외, 기본 ON)
+- 🟢 (2026-11-20) **원격 = github.com/byjay/bonglook 브랜치 `bmail`**(공개 저장소, 마스터 「그냥해」). `main` 은 별개 프로젝트(Outlook 애드인, deploy.yml 이 main 푸시 시 Pages 배포) → **절대 main 에 푸시 금지.** 푸시는 `git push origin main:bmail`.
+- [x] ④ Outlook COM 읽기 전용 가드 20d5778(지휘자 재실행: test-outlook-readonly·test-config-keys·selfcheck 전부 EXIT 0). 미확인: insertHtmlIntoCompose 가 받은 메일 HTMLBody 를 바꿀 수 있는지 · limit/folderType 무따옴표 보간
+- 협의 대기: SGW 세션 종료됨(질문 10 미답), SEDMS_0908 에 질문 1~5 재요청(11-20)
+- [ ] ~~④~~ (완료, 위 참조) · [ ] ⑤ 무료 LLM 전 가역 마스킹(이메일·전화·계좌, 이름·회사 제외, 기본 ON)
 - 🔴 미커밋 `src/main.js`·`src/preload.js` 의 `cloud:syncControlTower` 줄과 `src/sgw-sedms-sync.js` 는 **타 세션(10-21) 작업** — 되돌리거나 함께 커밋 금지. 내 커밋은 임시 index 로 내 변경분만.
 
 ## 🟢 세션 종료 스냅샷 (2026-09-29, 마스터 "마무리")
