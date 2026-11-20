@@ -38,10 +38,200 @@ try {
 } catch {}
 `;
 
+// ------------------------------------------------------------
+//  읽기 전용 가드 (CLAUDE.md Non-Negotiable #1 — Outlook 원본 불변)
+//  ------------------------------------------------------------
+//  이 모듈의 모든 PowerShell 은 runPowerShell 한 곳으로 나간다. spawn 직전에 스크립트를 검사해
+//  금지 호출이 있으면 spawn 없이 거부한다.
+//  스크립트에는 메일 제목·검색어 같은 사용자 데이터가 PowerShell 문자열로 보간되므로,
+//  문자열·주석을 PowerShell 토큰 규칙대로 걷어 낸 "코드 뼈대"만 검사한다.
+//  한계: 우리 코드의 실수를 막는 장치다. 이름을 런타임에 조립하는 의도적 우회
+//  (`$m | % Delete`, `.ForEach('Delete')`, `$fs = $f.Folders; $fs.Add()` 등)까지 막는다고 주장하지 않는다.
+//  속성 대입(`$f.Name = 'x'`)도 검사하지 않는다. 해석할 수 없는 스크립트는 닫힌 쪽(거부)으로 처리한다.
+// ------------------------------------------------------------
+const PS_SINGLE_QUOTES = "'\u2018\u2019\u201A\u201B";   // PowerShell 은 둥근 따옴표도 ASCII 따옴표와 똑같이 읽는다
+const PS_DOUBLE_QUOTES = '"\u201C\u201D\u201E';
+const isPsSq = (c) => c !== undefined && PS_SINGLE_QUOTES.includes(c);
+const isPsDq = (c) => c !== undefined && PS_DOUBLE_QUOTES.includes(c);
+const isPsNl = (c) => c === '\r' || c === '\n';
+// '#' 앞이 이 글자들이면 토큰 경계라 명령·식 모드 어느 쪽에서도 주석이다.
+const isPsTokenStart = (c) => c === undefined || /\s/.test(c) || ';(){},|&'.includes(c);
+
+function psCodeSkeleton(src) {
+  const n = src.length;
+  let out = [];
+  const fail = (msg) => { throw new Error(msg); };
+  // 직전 코드 토큰이 멤버 접근 '.' 이면 문자열이 곧 멤버 이름이다: $m.'Delete'()
+  const afterDot = () => {
+    let j = out.length - 1;
+    while (j >= 0 && /\s/.test(out[j])) j--;
+    return out[j] === '.' && out[j - 1] !== '.';
+  };
+  const skipSingle = (i) => {
+    for (; i < n; i++) {
+      if (isPsSq(src[i])) return i + 1;   // '' 이스케이프는 닫고 곧바로 다시 여는 것과 판정이 같다
+    }
+    return fail('작은따옴표 문자열이 닫히지 않음');
+  };
+  const scanDouble = (i, depth) => {
+    while (i < n) {
+      const c = src[i];
+      if (c === '`') { i += 2; continue; }
+      if (isPsDq(c)) return i + 1;        // "" 이스케이프도 같다
+      if (c === '$' && src[i + 1] === '(') { out.push(' '); i = scanCode(i + 2, depth + 1); out.push(' '); continue; }
+      i++;
+    }
+    return fail('큰따옴표 문자열이 닫히지 않음');
+  };
+  const scanHere = (i, isQuote, expand, depth) => {
+    let lineStart = true;
+    while (i < n) {
+      const c = src[i];
+      if (lineStart && isQuote(c) && src[i + 1] === '@') return i + 2;
+      lineStart = isPsNl(c);
+      if (lineStart) { i++; continue; }
+      if (expand) {
+        if (c === '`') { i += isPsNl(src[i + 1]) ? 1 : 2; continue; }
+        if (c === '$' && src[i + 1] === '(') { out.push(' '); i = scanCode(i + 2, depth + 1); out.push(' '); continue; }
+      }
+      i++;
+    }
+    return fail('here-string 이 닫히지 않음');
+  };
+  function scanCode(i, depth) {
+    if (depth > 64) fail('$( ) 중첩이 너무 깊음');
+    const inSub = depth > 0;
+    let parens = 0;
+    while (i < n) {
+      const c = src[i], next = src[i + 1];
+      if (c === '`') {
+        if (next !== undefined && /\w/.test(next)) out.push(next); else out.push(' ');
+        i += 2;
+        continue;
+      }
+      if (c === '@' && (isPsSq(next) || isPsDq(next))) {
+        let j = i + 2;
+        while (src[j] === ' ' || src[j] === '\t') j++;
+        if (isPsNl(src[j])) {
+          j += (src[j] === '\r' && src[j + 1] === '\n') ? 2 : 1;
+          out.push(' ');
+          i = isPsSq(next) ? scanHere(j, isPsSq, false, depth) : scanHere(j, isPsDq, true, depth);
+          out.push("''");
+          continue;
+        }
+      }
+      if (isPsSq(c)) {
+        const end = skipSingle(i + 1);
+        out.push(afterDot() ? src.slice(i + 1, end - 1) : "''");
+        i = end;
+        continue;
+      }
+      if (isPsDq(c)) {
+        const dot = afterDot();
+        const outer = out;
+        out = [];
+        const end = scanDouble(i + 1, depth);
+        const inner = out.join('');
+        out = outer;
+        out.push(dot ? src.slice(i + 1, end - 1).replace(/`/g, '') : "''", inner);
+        i = end;
+        continue;
+      }
+      if (c === '$' && next === '{') {
+        let j = i + 2;
+        while (j < n && src[j] !== '}') j += src[j] === '`' ? 2 : 1;
+        if (j >= n) fail('${ } 변수가 닫히지 않음');
+        out.push('$v');
+        i = j + 1;
+        continue;
+      }
+      if (c === '<' && next === '#' && isPsTokenStart(src[i - 1])) {
+        const j = src.indexOf('#>', i + 2);
+        if (j < 0) fail('블록 주석이 닫히지 않음');
+        out.push(' ');
+        i = j + 2;
+        continue;
+      }
+      if (c === '#') {
+        // `foo#bar` 는 명령 모드면 한 토큰, 식 모드면 주석이다. 문맥을 모르므로 거부한다
+        // (잘못 읽으면 뒤따르는 따옴표로 진짜 호출이 문자열 속에 숨는다).
+        if (!isPsTokenStart(src[i - 1])) fail("토큰에 붙은 '#' 는 주석 여부가 모호함");
+        while (i < n && !isPsNl(src[i])) i++;
+        continue;
+      }
+      if (inSub) {
+        if (c === '(') parens++;
+        else if (c === ')') {
+          if (parens === 0) return i + 1;
+          parens--;
+        }
+      }
+      out.push(c);
+      i++;
+    }
+    if (inSub) fail('$( ) 가 닫히지 않음');
+    return i;
+  }
+  scanCode(0, 0);
+  return out.join('');
+}
+
+// 멤버 이름(대소문자 무시). SaveAsFile·Saved·SendUsingAccount 는 \b 로 구분돼 걸리지 않는다.
+//  괄호 없는 메서드 그룹($d = $m.Delete)도 같은 이름으로 막는다.
+//  .Reply/.ReplyAll/.Forward 는 메모리 초안 생성(composeMail 이 Display 만 하고 저장 안 함)이라 허용.
+const PS_FORBIDDEN_MEMBERS = [
+  'Send',
+  'Delete',
+  'PermanentlyDelete',
+  'Save',
+  'SaveAs',
+  'Move',
+  'MoveTo',
+  'Copy',
+  'CopyTo',
+  'InvokeMember',
+  'Invoke',
+  'InvokeScript',
+  'InvokeCommand'
+];
+const PS_FORBIDDEN_PATTERNS = [
+  ['Folders.Add', /\.\s*Folders\s*\.\s*Add\b/i],
+  ['Items.Add', /\.\s*Items\s*\.\s*Add\b/i],
+  ['Categories.Add', /\.\s*Categories\s*\.\s*Add\b/i],
+  ['Categories.Remove', /\.\s*Categories\s*\.\s*Remove\b/i],
+  ['동적 멤버 이름($m.$n / $m.(...) / 점 소싱)', /(^|[^.])\.\s*[$(]/m],
+  // 문자열을 코드로 실행하면 뼈대 검사가 무의미해진다
+  ['문자열 실행 명령', /(^|[^\w$.-])(Invoke-Expression|iex|Invoke-Command|icm|Start-Job|Start-Process|saps|powershell|pwsh)(?![\w-])/i],
+  ['[scriptblock]', /\[\s*(System\.Management\.Automation\.)?scriptblock\s*\]/i],
+  ['& 호출 연산자', /&\s*(''|\$|\()/]
+];
+const PS_FORBIDDEN_MEMBER_RES = PS_FORBIDDEN_MEMBERS.map(name => [`.${name}`, new RegExp(`\\.\\s*${name}\\b`, 'i')]);
+
+// 순수 함수: 위반이 없으면 { ok:true }, 있으면 { ok:false, violations:[이름…] }. 원문(사용자 데이터)은 돌려주지 않는다.
+function checkReadOnlyScript(script) {
+  let code;
+  try { code = psCodeSkeleton(String(script)); }
+  catch (e) { return { ok: false, violations: ['해석 불가: ' + e.message] }; }
+  const violations = [];
+  for (const [name, re] of PS_FORBIDDEN_MEMBER_RES) if (re.test(code)) violations.push(name);
+  for (const [name, re] of PS_FORBIDDEN_PATTERNS) if (re.test(code)) violations.push(name);
+  // Close: 인자 없음(.NET 스트림 등)과 olDiscard(1)만 허용. olSave(0)·프롬프트(2)·변수는 저장 가능성이 있어 거부.
+  for (const m of code.matchAll(/\.\s*Close\s*\(([^)]*)\)/gi)) {
+    const arg = m[1].trim();
+    if (arg !== '' && arg !== '1') { violations.push(`.Close(${arg.slice(0, 20)})`); break; }
+  }
+  return violations.length ? { ok: false, violations } : { ok: true };
+}
+
 function runPowerShell(script) {
+  const fullScript = PS_UTF8_PREAMBLE + script;
+  const verdict = checkReadOnlyScript(fullScript);
+  if (!verdict.ok) {
+    return Promise.reject(new Error(`Outlook 읽기 전용 가드가 PowerShell 실행을 차단했습니다: ${verdict.violations.join(', ')}`));
+  }
   return new Promise((resolve, reject) => {
     const ps = spawn('powershell.exe', [
-      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', PS_UTF8_PREAMBLE + script
+      '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', fullScript
     ], { windowsHide: true });
     const outChunks = [], errChunks = [];
     ps.stdout.on('data', d => outChunks.push(d));
@@ -131,7 +321,7 @@ function buildDateFilter(dateFilter) {
 //     query: 검색어(비면 목록), limit: 개수, dateFilter: 위 형식
 // ------------------------------------------------------------
 async function searchMails(query, limit = 50, dateFilter = { mode: '6months' }) {
-  const safeQuery = String(query || '').replace(/'/g, "''");
+  const safeQuery = psQuote(query || '');
   const restrictFilter = buildDateFilter(dateFilter);
   // DASL 문자열 안의 큰따옴표(")를 PowerShell 이중따옴표 문자열용으로 이스케이프
   const restrictLine = restrictFilter
@@ -240,7 +430,7 @@ try {
 //  3) 특정 메일 상세
 // ------------------------------------------------------------
 async function getMailDetail(entryId) {
-  const safeId = String(entryId).replace(/'/g, "''");
+  const safeId = psQuote(entryId);
   const script = `
 $ErrorActionPreference = 'Stop'
 try {
@@ -289,7 +479,7 @@ try {
 //  4) 첨부파일 임시 저장 → 경로 배열 반환
 // ------------------------------------------------------------
 async function saveAttachments(entryId) {
-  const safeId = String(entryId).replace(/'/g, "''");
+  const safeId = psQuote(entryId);
   const tmpDir = path.join(os.tmpdir(), 'outlook-ai-attach', Date.now().toString());
   fs.mkdirSync(tmpDir, { recursive: true });
   const safeDir = tmpDir.replace(/\\/g, '\\\\');
@@ -329,7 +519,10 @@ try {
 //  tasks: [{ entryId, dir }]  (dir = 저장할 폴더, 없으면 생성)
 //  반환:  [{ entryId, paths: [저장경로...] }]
 // ------------------------------------------------------------
-function psQuote(s) { return String(s == null ? '' : s).replace(/'/g, "''"); }
+// PowerShell 은 둥근 작은따옴표(U+2018~U+201B)도 문자열 종결로 읽으므로 ASCII 따옴표와 함께 이중화한다.
+function psQuote(s) { return String(s == null ? '' : s).replace(/['\u2018\u2019\u201A\u201B]/g, '$&$&'); }
+// @'...'@ 안에서는 줄 맨 앞의 '@ 가 종결자다(CR 단독 줄바꿈 포함). 데이터가 닫지 못하게 공백을 끼운다.
+function psHereLiteral(s) { return String(s == null ? '' : s).replace(/(^|[\r\n])(?=['\u2018\u2019\u201A\u201B]@)/g, '$1 '); }
 
 async function saveAttachmentsBatch(tasks) {
   const list = (tasks || []).filter(t => t && t.entryId && t.dir);
@@ -888,10 +1081,10 @@ try {
   #   ★ Outlook 이 이미 서명을 넣었으면(지문 검사) 다시 넣지 않는다(이중 삽입 0)
   # ------------------------------------------------------------
   $insert = @'
-${bodyHtml}
+${psHereLiteral(bodyHtml)}
 '@
   $sig = @'
-${sigHtml}
+${psHereLiteral(sigHtml)}
 '@
   $fps = ${fpArray}
 
@@ -1691,7 +1884,7 @@ try {
 module.exports = {
   searchMails, getNewMailsSince, getMailDetail, saveAttachments, saveAttachmentsBatch,
   listNavFavorites, insertHtmlIntoCompose, probeAttachments, listRules,
-  checkConnection, buildDateFilter,
+  checkConnection, buildDateFilter, runPowerShell, checkReadOnlyScript,
   getContacts, getAllContacts, getAccountSettings, scanFolder, scanStores, listStores, listFolderTree,
   composeMail, getSignature, getSignatureHtml, listSignatureFiles,
   listCategories, listAppointments, listTasks, listSearchFolders, probeMailMeta, countOutlookItems,

@@ -248,5 +248,13 @@ try {
   ok(out.split('\n').pop());
 } catch (e) { bad('config-keys 테스트 실패: ' + String(e.stdout || e.message).split('\n').filter(l => /FAIL|오류/.test(l)).slice(0, 8).join(' | ').slice(0, 800)); }
 
+// ---- N) Outlook 원본 불변 읽기 전용 가드 (2026-11-06, CLAUDE.md #1) ----
+//   outlook.js 의 실제 스크립트 전수를 스텁 spawn 위에서 돌리고, 금지 호출 주입 거부·데이터 오탐 0 을 확인한다.
+console.log(`[${n++}] Outlook 읽기 전용 가드 (runPowerShell 전수 · 주입 거부 · 데이터 오탐)`);
+try {
+  const out = execFileSync(process.execPath, [join(ROOT, 'scripts', 'test-outlook-readonly.cjs')], { encoding: 'utf8' }).trim();
+  ok(out.split('\n').pop());
+} catch (e) { bad('읽기 전용 가드 테스트 실패: ' + String(e.stdout || e.message).split('\n').filter(l => /FAIL|오류/.test(l)).slice(0, 8).join(' | ').slice(0, 800)); }
+
 console.log(failed ? `\n셀프체크 실패 ${failed}건` : '\n셀프체크 전부 통과');
 process.exit(failed ? 1 : 0);
